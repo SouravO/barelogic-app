@@ -5,9 +5,8 @@
  */
 
 const GEMINI_API_KEY = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
-// Replace line 9:
 const GEMINI_API_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SkinAnalysisResult {
@@ -35,20 +34,38 @@ export interface SkinAnalysisResult {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Analyzes a face image using Google Gemini 2.5 Flash (vision model).
- * @param imageBase64 - Base64-encoded image (with or without data URI prefix)
+ * Analyzes face images using Google Gemini 2.5 Flash (vision model).
+ * Accepts 1–5 base64-encoded images taken from different angles for higher accuracy.
+ * @param imagesBase64 - Array of base64-encoded images (with or without data URI prefix)
  */
 export async function analyzeSkinWithGemini(
-  imageBase64: string
+  imagesBase64: string[]
 ): Promise<SkinAnalysisResult> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY_NOT_CONFIGURED: Add EXPO_PUBLIC_GEMINI_API_KEY to your .env file. Get a free key at https://aistudio.google.com/app/apikey');
   }
 
-  // Strip data URI prefix if present
-  const base64Data = imageBase64.includes('base64,')
-    ? imageBase64.split('base64,')[1]
-    : imageBase64;
+  if (!imagesBase64.length) {
+    throw new Error('At least one image is required for skin analysis');
+  }
+
+  // Strip data URI prefixes
+  const base64Images = imagesBase64.map((img) =>
+    img.includes('base64,') ? img.split('base64,')[1] : img
+  );
+
+  // Build image parts — one inline_data per captured angle
+  const imageParts = base64Images.map((data) => ({
+    inline_data: { mime_type: 'image/jpeg' as const, data },
+  }));
+
+  const angleCount = base64Images.length;
+  const angleDesc =
+    angleCount === 1
+      ? 'one frontal facial image'
+      : angleCount === 2
+      ? 'two facial images from different angles'
+      : `${angleCount} facial images from different angles (front, left cheek, right cheek${angleCount > 3 ? ', and additional angles' : ''})`;
 
   const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
     method: 'POST',
@@ -58,7 +75,9 @@ export async function analyzeSkinWithGemini(
         {
           parts: [
             {
-              text: `You are an expert dermatologist AI. Analyze this facial image and return a skin analysis JSON object with EXACTLY these fields — no markdown, no code blocks, raw JSON only:
+              text: `You are an expert dermatologist AI. I am providing ${angleDesc} of the same person for a comprehensive skin analysis. Analyze ALL images together to form a more accurate assessment than a single image alone would provide.
+
+Return a skin analysis JSON object with EXACTLY these fields — no markdown, no code blocks, raw JSON only:
 
 {
   "overall_score": <integer 0-100>,
@@ -73,7 +92,7 @@ export async function analyzeSkinWithGemini(
     "wrinkles": <int 0-100>,
     "redness": <int 0-100>
   },
-  "diagnosis": "<2-3 professional sentences>",
+  "diagnosis": "<2-3 professional sentences synthesizing all angles>",
   "recommendations": ["<rec1>", "<rec2>", "<rec3>", "<rec4>"],
   "markers": [
     { "name": "Stratum Corneum Hydration", "value": <int 45-95>, "status": <"good"|"fair"|"needs_attention"> },
@@ -89,12 +108,7 @@ export async function analyzeSkinWithGemini(
   ]
 }`,
             },
-            {
-              inline_data: {
-                mime_type: 'image/jpeg',
-                data: base64Data,
-              },
-            },
+            ...imageParts,
           ],
         },
       ],

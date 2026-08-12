@@ -43,6 +43,13 @@ const MARKERS = [
 ];
 
 const SCAN_IMAGE = require('@/assets/images/hero_kys.png');
+const MIN_PHOTOS = 3;
+
+const ANGLE_PROMPTS = [
+  { label: 'Photo 1 / 3', hint: 'FRONT FACE — look straight at camera', icon: 'face-man' },
+  { label: 'Photo 2 / 3', hint: 'LEFT CHEEK — turn head slightly left', icon: 'face-man-profile' },
+  { label: 'Photo 3 / 3', hint: 'RIGHT CHEEK — turn head slightly right', icon: 'face-man-profile' },
+];
 
 export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   visible,
@@ -52,36 +59,36 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   const insets = useSafeAreaInsets();
   const [stage, setStage] = useState<'capture' | 'scanning' | 'results'>('capture');
   const [activeMarkerIndex, setActiveMarkerIndex] = useState(0);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [analysisResult, setAnalysisResult] = useState<SkinAnalysisResult | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraRef, setCameraRef] = useState<CameraView | null>(null);
   const [facing, setFacing] = useState<'front' | 'back'>('front');
   const scanProgress = React.useRef(new Animated.Value(0)).current;
 
+  // Derived: which slot are we filling next?
+  const currentSlot = Math.min(capturedImages.length, MIN_PHOTOS - 1);
+  const canAnalyze = capturedImages.length >= MIN_PHOTOS;
+
   // Reset state when modal opens
   useEffect(() => {
     if (visible) {
       setStage('capture');
-      setCapturedImage(null);
+      setCapturedImages([]);
       setAnalysisResult(null);
       setActiveMarkerIndex(0);
       scanProgress.setValue(0);
     }
   }, [visible, scanProgress]);
 
+
   const handleTakePhoto = async () => {
     if (!cameraRef) return;
 
     try {
-      const photo = await cameraRef.takePictureAsync({
-        quality: 0.8,
-        base64: false,
-      });
-
+      const photo = await cameraRef.takePictureAsync({ quality: 0.8, base64: false });
       if (photo?.uri) {
-        setCapturedImage(photo.uri);
-        await startAnalysis(photo.uri);
+        setCapturedImages((prev) => [...prev, photo.uri]);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -99,8 +106,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
       });
 
       if (!result.canceled && result.assets[0]) {
-        setCapturedImage(result.assets[0].uri);
-        await startAnalysis(result.assets[0].uri);
+        setCapturedImages((prev) => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -108,10 +114,16 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
     }
   };
 
-  const startAnalysis = async (imageUri: string) => {
+  const handleRemovePhoto = (index: number) => {
+    setCapturedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+
+  const startAnalysis = async () => {
+    if (!canAnalyze) return;
     setStage('scanning');
 
-    // Start animation
+    // Start scan-line animation
     Animated.timing(scanProgress, {
       toValue: 1,
       duration: 4500,
@@ -125,12 +137,14 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
     }, 300);
 
     try {
-      // Convert image to base64 and send to Gemini
-      const base64Image = await convertImageToBase64(imageUri);
-      const result = await analyzeSkinWithGemini(base64Image);
-      
+      // Convert all captured images to base64 and send together to Gemini
+      const base64Images = await Promise.all(
+        capturedImages.slice(0, MIN_PHOTOS).map((uri) => convertImageToBase64(uri))
+      );
+      const result = await analyzeSkinWithGemini(base64Images);
+
       setAnalysisResult(result);
-      
+
       // Wait for animation to complete
       setTimeout(() => {
         clearInterval(markerInterval);
@@ -139,51 +153,35 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
     } catch (error) {
       console.error('Analysis error:', error);
       clearInterval(markerInterval);
-      
-      // Handle specific error types
+
       let errorTitle = 'Analysis Failed';
-      let errorMessage = 'Failed to analyze the image. Please try again.';
-      
+      let errorMessage = 'Failed to analyze the images. Please try again.';
+
       if (error instanceof Error) {
         if (error.message.includes('API_KEY_NOT_CONFIGURED')) {
           errorTitle = 'API Key Missing';
-          errorMessage = 'Please add your Gemini API key to the .env file.\n\n' +
-            '1. Get a free key from https://makersuite.google.com/app/apikey\n' +
-            '2. Add it to .env file as EXPO_PUBLIC_GEMINI_API_KEY\n' +
+          errorMessage =
+            'Please add your Gemini API key to the .env file.\n\n' +
+            '1. Get a free key from https://aistudio.google.com/app/apikey\n' +
+            '2. Add it to .env as EXPO_PUBLIC_GEMINI_API_KEY\n' +
             '3. Restart the app';
         } else if (error.message.includes('INVALID_API_KEY')) {
           errorTitle = 'Invalid API Key';
-          errorMessage = 'Your Gemini API key is invalid.\n\n' +
-            'Please verify your key at:\nhttps://makersuite.google.com/app/apikey';
-        } else if (error.message.includes('MODEL_NOT_AVAILABLE')) {
-          errorTitle = 'Vision Model Not Available';
-          errorMessage = 'Groq vision models are not available with your API key.\n\n' +
-            'Options:\n' +
-            '1. Upgrade your Groq plan for vision access\n' +
-            '2. Or use OpenAI GPT-4 Vision instead\n\n' +
-            'For now, showing demo results...';
-          // Still show results with mock data
-          setTimeout(() => {
-            clearInterval(markerInterval);
-            setStage('results');
-          }, 1000);
-          return;
+          errorMessage =
+            'Your Gemini API key is invalid.\n\nVerify it at:\nhttps://aistudio.google.com/app/apikey';
         } else if (error.message.includes('Network request failed')) {
           errorTitle = 'Network Error';
           errorMessage = 'Please check your internet connection and try again.';
         }
       }
-      
-      Alert.alert(
-        errorTitle,
-        errorMessage,
-        [{ text: 'OK', onPress: () => setStage('capture') }]
-      );
+
+      Alert.alert(errorTitle, errorMessage, [{ text: 'OK', onPress: () => setStage('capture') }]);
     }
   };
 
+
   const handleRetake = () => {
-    setCapturedImage(null);
+    setCapturedImages([]);
     setAnalysisResult(null);
     setStage('capture');
   };
@@ -205,7 +203,11 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
           <View style={styles.titleBox}>
             <Text style={styles.headerTitle}>KYS DIAGNOSTIC INTELLIGENCE</Text>
             <Text style={styles.headerSub}>
-              {stage === 'capture' ? 'Capture Your Face' : '14-Marker AI Scan'}
+              {stage === 'capture'
+                ? capturedImages.length < MIN_PHOTOS
+                  ? ANGLE_PROMPTS[currentSlot].label
+                  : 'Ready to Analyse'
+                : '14-Marker AI Scan'}
             </Text>
           </View>
 
@@ -242,21 +244,68 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
                     style={styles.camera}
                     facing={facing}
                   />
-                  {/* Overlay rendered outside CameraView to avoid warning */}
+                  {/* Overlay */}
                   <View style={styles.cameraOverlay}>
                     <View style={styles.faceGuide} />
                     <View style={styles.reticleCornerTL} />
                     <View style={styles.reticleCornerTR} />
                     <View style={styles.reticleCornerBL} />
                     <View style={styles.reticleCornerBR} />
+                    {/* Angle prompt inside camera */}
+                    {!canAnalyze && (
+                      <View style={styles.anglePromptBanner}>
+                        <MaterialCommunityIcons
+                          name="face-man"
+                          size={16}
+                          color="#fff"
+                        />
+                        <Text style={styles.anglePromptText}>
+                          {ANGLE_PROMPTS[currentSlot].hint}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
 
-                <View style={styles.captureControls}>
-                  <Text style={styles.captureHint}>
-                    Position your face within the frame
-                  </Text>
+                {/* Thumbnail slots */}
+                <View style={styles.thumbnailRow}>
+                  {Array.from({ length: MIN_PHOTOS }).map((_, i) => (
+                    <View key={i} style={styles.thumbnailSlot}>
+                      {capturedImages[i] ? (
+                        <>
+                          <Image
+                            source={{ uri: capturedImages[i] }}
+                            style={styles.thumbnailImage}
+                            resizeMode="cover"
+                          />
+                          <TouchableOpacity
+                            style={styles.thumbnailRemoveBtn}
+                            onPress={() => handleRemovePhoto(i)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="close-circle" size={18} color="#fff" />
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <View style={styles.thumbnailEmpty}>
+                          <Ionicons
+                            name="camera-outline"
+                            size={22}
+                            color={i === capturedImages.length ? SaharaTheme.primary : SaharaTheme.outlineVariant}
+                          />
+                          <Text style={[
+                            styles.thumbnailSlotLabel,
+                            i === capturedImages.length && { color: SaharaTheme.primary },
+                          ]}>
+                            {['Front', 'Left', 'Right'][i]}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
 
+                <View style={styles.captureControls}>
                   <View style={styles.buttonRow}>
                     <TouchableOpacity
                       style={styles.flipBtn}
@@ -267,21 +316,39 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.captureBtn}
-                      onPress={handleTakePhoto}
+                      style={[styles.captureBtn, canAnalyze && styles.captureBtnDisabled]}
+                      onPress={canAnalyze ? undefined : handleTakePhoto}
                       activeOpacity={0.8}
+                      disabled={canAnalyze}
                     >
                       <View style={styles.captureBtnInner} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       style={styles.galleryBtn}
-                      onPress={handlePickImage}
+                      onPress={canAnalyze ? undefined : handlePickImage}
                       activeOpacity={0.7}
+                      disabled={canAnalyze}
                     >
-                      <Ionicons name="images" size={28} color={SaharaTheme.onSurface} />
+                      <Ionicons
+                        name="images"
+                        size={28}
+                        color={canAnalyze ? SaharaTheme.outlineVariant : SaharaTheme.onSurface}
+                      />
                     </TouchableOpacity>
                   </View>
+
+                  {/* START ANALYSIS — only shown when 3 images ready */}
+                  {canAnalyze && (
+                    <TouchableOpacity
+                      style={styles.analyseBtn}
+                      onPress={startAnalysis}
+                      activeOpacity={0.88}
+                    >
+                      <MaterialCommunityIcons name="radar" size={20} color="#fff" />
+                      <Text style={styles.analyseBtnText}>START ANALYSIS</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </>
             )}
@@ -292,8 +359,8 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
         {stage === 'scanning' && (
           <View style={styles.scanContainer}>
             <View style={styles.frameWrapper}>
-              {capturedImage ? (
-                <Image source={{ uri: capturedImage }} style={styles.scanImage} resizeMode="cover" />
+              {capturedImages[0] ? (
+                <Image source={{ uri: capturedImages[0] }} style={styles.scanImage} resizeMode="cover" />
               ) : (
                 <Image source={SCAN_IMAGE} style={styles.scanImage} resizeMode="cover" />
               )}
@@ -329,12 +396,17 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
         {/* Results Stage */}
         {stage === 'results' && analysisResult && (
           <ScrollView contentContainerStyle={styles.resultsContainer}>
-            {/* Display captured image */}
-            {capturedImage && (
-              <View style={styles.resultImageWrapper}>
-                <Image source={{ uri: capturedImage }} style={styles.resultImage} resizeMode="cover" />
-              </View>
-            )}
+            {/* 3-photo thumbnail strip */}
+            <View style={styles.resultThumbRow}>
+              {capturedImages.slice(0, MIN_PHOTOS).map((uri, i) => (
+                <Image
+                  key={i}
+                  source={{ uri }}
+                  style={styles.resultThumb}
+                  resizeMode="cover"
+                />
+              ))}
+            </View>
 
             <View style={styles.scoreBadge}>
               <Text style={styles.scoreNumber}>{analysisResult.overall_score}</Text>
@@ -451,7 +523,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
                 activeOpacity={0.8}
               >
                 <Ionicons name="camera" size={20} color={SaharaTheme.onSurface} />
-                <Text style={styles.retakeBtnText}>Retake Photo</Text>
+                <Text style={styles.retakeBtnText}>New Scan</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -576,12 +648,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 20,
   },
-  captureHint: {
-    fontFamily: Fonts?.sans,
-    fontSize: 14,
-    color: SaharaTheme.onSurfaceVariant,
-    textAlign: 'center',
-  },
+
   buttonRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -621,7 +688,94 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Scanning Stage Styles
+  // Angle prompt banner
+  anglePromptBanner: {
+    position: 'absolute',
+    bottom: 24,
+    left: 24,
+    right: 24,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  anglePromptText: {
+    fontFamily: Fonts?.sans,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.8,
+    flex: 1,
+  },
+  // Thumbnail slots
+  thumbnailRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: SaharaTheme.surface,
+  },
+  thumbnailSlot: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbnailEmpty: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: SaharaTheme.outlineVariant,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: SaharaTheme.surfaceContainerLow,
+  },
+  thumbnailSlotLabel: {
+    fontFamily: Fonts?.sans,
+    fontSize: 10,
+    fontWeight: '600',
+    color: SaharaTheme.outlineVariant,
+    letterSpacing: 0.5,
+  },
+  thumbnailRemoveBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+  },
+  captureBtnDisabled: {
+    opacity: 0.35,
+  },
+  // Start Analysis CTA
+  analyseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: SaharaTheme.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    borderRadius: 50,
+    width: '100%',
+  },
+  analyseBtnText: {
+    fontFamily: Fonts?.sans,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 1.5,
+  },
   scanContainer: {
     flex: 1,
     alignItems: 'center',
@@ -733,18 +887,17 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
   },
-  resultImageWrapper: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    overflow: 'hidden',
-    marginBottom: 16,
-    borderWidth: 3,
-    borderColor: SaharaTheme.primary,
+  resultThumbRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
   },
-  resultImage: {
-    width: '100%',
-    height: '100%',
+  resultThumb: {
+    width: 88,
+    height: 88,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: SaharaTheme.primary,
   },
   scoreBadge: {
     width: 120,
