@@ -4,7 +4,6 @@ import {
   View,
   Text,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   Image,
   Alert,
@@ -61,7 +60,7 @@ export default function CartScreen() {
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Header cartCount={items.reduce((acc, i) => acc + i.quantity, 0)} />
 
       <View style={styles.headerSection}>
@@ -137,7 +136,7 @@ export default function CartScreen() {
           </View>
         </>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

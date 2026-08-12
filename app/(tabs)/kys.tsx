@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, SafeAreaView } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SaharaTheme } from '@/constants/theme';
 import { Header } from '@/components/Header';
 import { HeroBanner } from '@/components/HeroBanner';
@@ -9,13 +9,13 @@ export default function KysScreen() {
   const [modalVisible, setModalVisible] = useState(false);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Header />
       <View style={styles.content}>
         <HeroBanner onStartScan={() => setModalVisible(true)} />
       </View>
       <KysScannerModal visible={modalVisible} onClose={() => setModalVisible(false)} />
-    </SafeAreaView>
+    </View>
   );
 }
 

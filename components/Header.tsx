@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SaharaTheme, Fonts } from '@/constants/theme';
 
 interface HeaderProps {
@@ -18,8 +19,11 @@ export const Header: React.FC<HeaderProps> = ({
   onNotificationPress,
   cartCount = 2,
 }) => {
+  const insets = useSafeAreaInsets();
+  const paddingTop = Math.max(insets.top, 12);
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop, height: 56 + paddingTop }]}>
       <TouchableOpacity
         style={styles.iconButton}
         onPress={onMenuPress}

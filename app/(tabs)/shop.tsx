@@ -4,7 +4,6 @@ import {
   View,
   Text,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   Alert,
 } from 'react-native';
@@ -51,7 +50,7 @@ export default function ShopScreen() {
   const [activeCategory, setActiveCategory] = useState('ALL');
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Header />
 
       <View style={styles.titleSection}>
@@ -100,7 +99,7 @@ export default function ShopScreen() {
           ))}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

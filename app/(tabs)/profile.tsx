@@ -4,7 +4,6 @@ import {
   View,
   Text,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   Image,
 } from 'react-native';
@@ -14,7 +13,7 @@ import { Header } from '@/components/Header';
 
 export default function ProfileScreen() {
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Header />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -64,7 +63,7 @@ export default function ProfileScreen() {
           <Feather name="chevron-right" size={18} color={SaharaTheme.outline} />
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

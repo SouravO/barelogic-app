@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SaharaTheme, Fonts } from '@/constants/theme';
 import { ProductItem } from './ProductCard';
 
@@ -59,6 +60,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   onClose,
   onSelectProduct,
 }) => {
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
 
   const filteredProducts = SEARCH_CATALOG.filter(
@@ -71,7 +73,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   return (
     <Modal visible={visible} animationType="fade" transparent={false}>
       <View style={styles.container}>
-        <View style={styles.searchHeader}>
+        <View style={[styles.searchHeader, { paddingTop: Math.max(insets.top, 16) + 12 }]}>
           <TouchableOpacity onPress={onClose} style={styles.backBtn} activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={24} color={SaharaTheme.onSurface} />
           </TouchableOpacity>

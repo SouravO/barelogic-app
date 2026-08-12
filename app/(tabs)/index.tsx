@@ -4,11 +4,10 @@ import {
   View,
   Text,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
-  StatusBar,
   Alert,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { SaharaTheme, Fonts } from '@/constants/theme';
 import { Header } from '@/components/Header';
@@ -54,8 +53,8 @@ export default function StorefrontSaharaScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={SaharaTheme.surface} />
+    <View style={styles.container}>
+      <StatusBar style="dark" translucent backgroundColor="transparent" />
 
       <Header
         onMenuPress={() => Alert.alert('Menu', 'Bare Logic Navigation Menu')}
@@ -127,12 +126,12 @@ export default function StorefrontSaharaScreen() {
         onClose={() => setIsSearchVisible(false)}
         onSelectProduct={(item) => handleAddToCart(item)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
     backgroundColor: SaharaTheme.surface,
   },

@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SaharaTheme, Fonts } from '@/constants/theme';
 
 interface KysScannerModalProps {
@@ -43,6 +44,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   onClose,
   onApplyRegimen,
 }) => {
+  const insets = useSafeAreaInsets();
   const [stage, setStage] = useState<'scanning' | 'results'>('scanning');
   const [activeMarkerIndex, setActiveMarkerIndex] = useState(0);
   const scanProgress = React.useRef(new Animated.Value(0)).current;
@@ -79,7 +81,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
     <Modal visible={visible} animationType="slide" transparent={false}>
       <View style={styles.container}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 12 }]}>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
             <Ionicons name="close" size={24} color={SaharaTheme.onSurface} />
           </TouchableOpacity>
