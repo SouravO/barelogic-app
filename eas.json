@@ -26,8 +26,5 @@
         "buildType": "app-bundle"
       }
     }
-  },
-  "hooks": {
-    "postInstall": "./eas-hooks/eas-build-post-install.sh"
   }
 }

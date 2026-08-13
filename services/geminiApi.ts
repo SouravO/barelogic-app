@@ -1,12 +1,72 @@
 /**
- * Google Gemini 2.5 Flash API — Skin Analysis
+ * Google Gemini API — Skin Analysis
  * Vision-capable model with generous free tier.
  * Get your API key at: https://aistudio.google.com/app/apikey
  */
 
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+
+/**
+ * Gemini vision models don't need full-resolution photos. Downscaling keeps the
+ * HTTP request small enough that React Native's fetch on Android does not throw
+ * "Network request failed" with multi-MB base64 payloads.
+ */
+const MAX_IMAGE_WIDTH = 1024;
+const IMAGE_COMPRESSION = 0.6;
+
 const GEMINI_API_KEY = (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
 const GEMINI_API_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent';
+const GEMINI_TIMEOUT_MS = 90000;
+
+async function fetchWithTimeout(url: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export interface ConnectivityReport {
+  internetReachable: boolean;
+  geminiHostReachable: boolean;
+  errorCode?: string;
+  errorDetail?: string;
+}
+
+/**
+ * Determines whether the device has internet at all and whether it can reach
+ * Google's Gemini host. Used to tell a "no internet" failure from a
+ * "network/ISP blocks Google services" failure.
+ */
+export async function testConnectivity(): Promise<ConnectivityReport> {
+  let internetReachable = false;
+  try {
+    const res = await fetchWithTimeout(
+      'https://connectivitycheck.gstatic.com/generate_204',
+      8000
+    );
+    internetReachable = res.ok;
+  } catch {
+    internetReachable = false;
+  }
+
+  let geminiHostReachable = false;
+  let errorCode: string | undefined;
+  let errorDetail: string | undefined;
+  try {
+    await fetchWithTimeout('https://generativelanguage.googleapis.com', 8000);
+    geminiHostReachable = true; // any HTTP response means the host is reachable
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    errorCode = err?.code;
+    errorDetail = err?.message;
+  }
+
+  return { internetReachable, geminiHostReachable, errorCode, errorDetail };
+}
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SkinAnalysisResult {
@@ -64,14 +124,19 @@ export async function analyzeSkinWithGemini(
     angleCount === 1
       ? 'one frontal facial image'
       : angleCount === 2
-      ? 'two facial images from different angles'
-      : `${angleCount} facial images from different angles (front, left cheek, right cheek${angleCount > 3 ? ', and additional angles' : ''})`;
+        ? 'two facial images from different angles'
+        : `${angleCount} facial images from different angles (front, left cheek, right cheek${angleCount > 3 ? ', and additional angles' : ''})`;
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
+      GEMINI_TIMEOUT_MS,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+        contents: [
         {
           parts: [
             {
@@ -118,7 +183,15 @@ Return a skin analysis JSON object with EXACTLY these fields — no markdown, no
         responseMimeType: 'application/json',
       },
     }),
-  });
+      }
+    );
+  } catch (error) {
+    const err = error as Error;
+    if (err?.name === 'AbortError' || /abort|timed?\s?out/i.test(err?.message || '')) {
+      throw new Error('REQUEST_TIMEOUT: Analysis timed out. Please try again.');
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -170,9 +243,35 @@ Return a skin analysis JSON object with EXACTLY these fields — no markdown, no
 }
 
 /**
- * Convert an image URI (camera / picker) to a bare base64 string.
+ * Convert an image URI (camera / picker) to a small JPEG base64 string.
+ * Resizes to max 1024px and compresses so the Gemini request stays well under
+ * Android's fetch body limits (huge base64 payloads throw "Network request failed").
  */
 export async function convertImageToBase64(uri: string): Promise<string> {
+  if (uri.startsWith('file://')) {
+    const context = ImageManipulator.manipulate(uri);
+    const rendered = await context.renderAsync();
+
+    if (rendered.width > MAX_IMAGE_WIDTH) {
+      const resizedContext = ImageManipulator.manipulate(uri);
+      resizedContext.resize({ width: MAX_IMAGE_WIDTH });
+      const resized = await resizedContext.renderAsync();
+      const result = await resized.saveAsync({
+        format: SaveFormat.JPEG,
+        compress: IMAGE_COMPRESSION,
+        base64: true,
+      });
+      return result.base64 ?? '';
+    }
+
+    const result = await rendered.saveAsync({
+      format: SaveFormat.JPEG,
+      compress: IMAGE_COMPRESSION,
+      base64: true,
+    });
+    return result.base64 ?? '';
+  }
+
   const response = await fetch(uri);
   const blob = await response.blob();
 

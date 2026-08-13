@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SaharaTheme, Fonts } from '@/constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { analyzeSkinWithGemini, convertImageToBase64 } from '@/services/geminiApi';
+import { analyzeSkinWithGemini, convertImageToBase64, testConnectivity } from '@/services/geminiApi';
 import type { SkinAnalysisResult } from '@/services/geminiApi';
 
 interface KysScannerModalProps {
@@ -141,9 +141,25 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
       const base64Images = await Promise.all(
         capturedImages.slice(0, MIN_PHOTOS).map((uri) => convertImageToBase64(uri))
       );
-      const result = await analyzeSkinWithGemini(base64Images);
 
-      setAnalysisResult(result);
+      let result: SkinAnalysisResult;
+      const MAX_ATTEMPTS = 2;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          result = await analyzeSkinWithGemini(base64Images);
+          break;
+        } catch (err) {
+          const isTransient =
+            err instanceof Error &&
+            (err.message.includes('Network request failed') ||
+              err.message.includes('REQUEST_TIMEOUT'));
+          if (!isTransient || attempt === MAX_ATTEMPTS) {
+            throw err;
+          }
+        }
+      }
+
+      setAnalysisResult(result!);
 
       // Wait for animation to complete
       setTimeout(() => {
@@ -164,14 +180,35 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
             'Please add your Gemini API key to the .env file.\n\n' +
             '1. Get a free key from https://aistudio.google.com/app/apikey\n' +
             '2. Add it to .env as EXPO_PUBLIC_GEMINI_API_KEY\n' +
-            '3. Restart the app';
+            '3. Rebuild the app';
         } else if (error.message.includes('INVALID_API_KEY')) {
           errorTitle = 'Invalid API Key';
           errorMessage =
             'Your Gemini API key is invalid.\n\nVerify it at:\nhttps://aistudio.google.com/app/apikey';
+        } else if (error.message.includes('REQUEST_TIMEOUT')) {
+          errorTitle = 'Taking Too Long';
+          errorMessage = 'The analysis timed out. Please try again.';
         } else if (error.message.includes('Network request failed')) {
           errorTitle = 'Network Error';
-          errorMessage = 'Please check your internet connection and try again.';
+          const code = (error as Error & { code?: string }).code;
+
+          const report = await testConnectivity().catch(() => null);
+          if (report && !report.internetReachable) {
+            errorMessage =
+              'No internet connection detected.\n\nPlease connect to the internet and try again.';
+          } else if (report && !report.geminiHostReachable) {
+            errorMessage =
+              `Your internet works, but this network is blocking Google's analysis servers (${report.errorCode || 'blocked'}).\n\n` +
+              'Please try:\n' +
+              '• Switch from WiFi to mobile data\n' +
+              '• Connect to a different WiFi network\n' +
+              '• Enable a VPN';
+          } else {
+            errorMessage = `Could not reach the analysis server (${code || 'network error'}). Please try again.`;
+          }
+        } else if (error.message.startsWith('Gemini API error')) {
+          errorTitle = 'Analysis Failed';
+          errorMessage = error.message.replace(/^Gemini API error/, 'The analysis service returned an error:');
         }
       }
 
