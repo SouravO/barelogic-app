@@ -65,20 +65,35 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   const [cameraRef, setCameraRef] = useState<CameraView | null>(null);
   const [facing, setFacing] = useState<'front' | 'back'>('front');
   const scanProgress = React.useRef(new Animated.Value(0)).current;
+  const scanLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
+  const markerIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Derived: which slot are we filling next?
   const currentSlot = Math.min(capturedImages.length, MIN_PHOTOS - 1);
   const canAnalyze = capturedImages.length >= MIN_PHOTOS;
 
+  const stopScanAnimation = () => {
+    if (scanLoopRef.current) {
+      scanLoopRef.current.stop();
+      scanLoopRef.current = null;
+    }
+    if (markerIntervalRef.current) {
+      clearInterval(markerIntervalRef.current);
+      markerIntervalRef.current = null;
+    }
+  };
+
   // Reset state when modal opens
   useEffect(() => {
     if (visible) {
+      stopScanAnimation();
       setStage('capture');
       setCapturedImages([]);
       setAnalysisResult(null);
       setActiveMarkerIndex(0);
       scanProgress.setValue(0);
     }
+    return stopScanAnimation;
   }, [visible, scanProgress]);
 
 
@@ -122,19 +137,25 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   const startAnalysis = async () => {
     if (!canAnalyze) return;
     setStage('scanning');
+    setActiveMarkerIndex(0);
 
-    // Start scan-line animation
-    Animated.timing(scanProgress, {
-      toValue: 1,
-      duration: 4500,
-      easing: Easing.linear,
-      useNativeDriver: true,
-    }).start();
+    // Indeterminate scan-line sweep — loops until the response actually arrives
+    scanProgress.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(scanProgress, {
+        toValue: 1,
+        duration: 2500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    scanLoopRef.current = loop;
+    loop.start();
 
-    // Animate through markers
-    const markerInterval = setInterval(() => {
-      setActiveMarkerIndex((prev) => (prev < MARKERS.length - 1 ? prev + 1 : prev));
-    }, 300);
+    // Cycle markers continuously so the UI never stalls while waiting
+    markerIntervalRef.current = setInterval(() => {
+      setActiveMarkerIndex((prev) => (prev + 1) % MARKERS.length);
+    }, 250);
 
     try {
       // Convert all captured images to base64 and send together to Gemini
@@ -161,14 +182,17 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
 
       setAnalysisResult(result!);
 
-      // Wait for animation to complete
-      setTimeout(() => {
-        clearInterval(markerInterval);
-        setStage('results');
-      }, 4500);
+      // Response received — stop the loop and do a short completion sweep
+      stopScanAnimation();
+      Animated.timing(scanProgress, {
+        toValue: 1,
+        duration: 400,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start(() => setStage('results'));
     } catch (error) {
       console.error('Analysis error:', error);
-      clearInterval(markerInterval);
+      stopScanAnimation();
 
       let errorTitle = 'Analysis Failed';
       let errorMessage = 'Failed to analyze the images. Please try again.';
