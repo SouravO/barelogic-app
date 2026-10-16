@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,8 +9,8 @@ import {
   Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { SaharaTheme, Fonts } from '@/constants/theme';
-import { Header } from '@/components/Header';
+import { SaharaTheme, Fonts } from '@/src/theme';
+import { Header } from '@/components/layout/Header';
 
 interface CartItem {
   id: string;

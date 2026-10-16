@@ -1,8 +1,7 @@
+import { Fonts, SaharaTheme } from '@/src/theme';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import React from 'react';
 import { Platform } from 'react-native';
-import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import { SaharaTheme, Fonts } from '@/constants/theme';
 
 export default function TabLayout() {
   return (
@@ -77,7 +76,7 @@ export default function TabLayout() {
         name="cart"
         options={{
           title: 'Cart',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color }) => (
             <Feather
               name="shopping-bag"
               size={22}

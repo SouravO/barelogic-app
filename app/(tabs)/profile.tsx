@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   StyleSheet,
   View,
@@ -8,8 +7,8 @@ import {
   Image,
 } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { SaharaTheme, Fonts } from '@/constants/theme';
-import { Header } from '@/components/Header';
+import { SaharaTheme, Fonts } from '@/src/theme';
+import { Header } from '@/components/layout/Header';
 
 export default function ProfileScreen() {
   return (

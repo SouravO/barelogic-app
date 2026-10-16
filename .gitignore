@@ -18,6 +18,10 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# build artifacts
+*.apk
+*.aab
+
 # Metro
 .metro-health-check*
 
