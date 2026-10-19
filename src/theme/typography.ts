@@ -7,30 +7,31 @@ import { Platform } from 'react-native';
 
 /**
  * Font families by platform
+ * Using Google Sans Text for all platforms
  */
 export const fontFamily = Platform.select({
   ios: {
-    sans: 'System',
+    sans: 'GoogleSansText-Regular',
     serif: 'Georgia',
-    rounded: 'System',
+    rounded: 'GoogleSansText-Medium',
     mono: 'Courier',
   },
   android: {
-    sans: 'sans-serif',
+    sans: 'GoogleSansText-Regular',
     serif: 'serif',
-    rounded: 'sans-serif',
+    rounded: 'GoogleSansText-Medium',
     mono: 'monospace',
   },
   web: {
-    sans: "'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    sans: "'GoogleSansText-Regular', 'Google Sans Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     serif: "'EB Garamond', Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', system-ui, sans-serif",
+    rounded: "'GoogleSansText-Medium', 'Google Sans Text', system-ui, sans-serif",
     mono: "'Fira Code', 'Courier New', monospace",
   },
   default: {
-    sans: 'System',
+    sans: 'GoogleSansText-Regular',
     serif: 'serif',
-    rounded: 'System',
+    rounded: 'GoogleSansText-Medium',
     mono: 'monospace',
   },
 });
@@ -66,6 +67,18 @@ export const fontSize = {
 
   // Caption
   caption: 11,
+} as const;
+
+/**
+ * Font weight configurations mapped to Google Sans Text font families
+ */
+export const fontWeightToFamily = {
+  '300': 'GoogleSansText-Regular', // Light weight uses regular
+  '400': 'GoogleSansText-Regular',
+  '500': 'GoogleSansText-Medium',
+  '600': 'GoogleSansText-Medium',  // Semibold uses medium
+  '700': 'GoogleSansText-Bold',
+  '800': 'GoogleSansText-Bold',    // Extrabold uses bold
 } as const;
 
 /**

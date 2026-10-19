@@ -100,6 +100,11 @@
    utilities reproduce the same font-size + line-height the StyleSheet used.
    --text-2xs fills the small size gluestack components reference (2xs). */
 @theme {
+  /* Font families */
+  --font-sans: 'GoogleSansText-Regular', system-ui, -apple-system, sans-serif;
+  --font-sans-medium: 'GoogleSansText-Medium', system-ui, -apple-system, sans-serif;
+  --font-sans-bold: 'GoogleSansText-Bold', system-ui, -apple-system, sans-serif;
+  
   /* gluestack's `tracking-sm` has no built-in Tailwind equivalent. */
   --tracking-sm: 0.01em;
 
@@ -139,4 +144,24 @@
 
   --text-caption: 11px;
   --text-caption--line-height: 16.5px;
+}
+
+/* Apply Google Sans Text font globally */
+@layer base {
+  * {
+    font-family: 'GoogleSansText-Regular', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  
+  /* Font weight variations */
+  .font-normal {
+    font-family: 'GoogleSansText-Regular', sans-serif;
+  }
+  
+  .font-medium {
+    font-family: 'GoogleSansText-Medium', sans-serif;
+  }
+  
+  .font-semibold, .font-bold {
+    font-family: 'GoogleSansText-Bold', sans-serif;
+  }
 }

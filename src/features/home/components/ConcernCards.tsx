@@ -1,9 +1,8 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { colors, fontSize, spacing } from '@/theme';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Text } from '@/components/ui/Text';
-import { colors, spacing, fontFamily } from '@/theme';
-import { SKIN_CONCERNS, ConcernItem } from '../data/concerns';
+import React from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ConcernItem, SKIN_CONCERNS } from '../data/concerns';
 
 interface ConcernCardsProps {
   onConcernPress?: (concern: ConcernItem) => void;
@@ -18,11 +17,11 @@ export const ConcernCards: React.FC<ConcernCardsProps> = ({
     <View style={styles.container}>
       {/* Section Header */}
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.headerTitle}>
+        <Text style={styles.headerTitle}>
           Shop by Concern
         </Text>
         <TouchableOpacity onPress={onViewAllPress} activeOpacity={0.7}>
-          <Text variant="labelMedium" style={styles.viewAllText}>
+          <Text style={styles.viewAllText}>
             View All →
           </Text>
         </TouchableOpacity>
@@ -42,7 +41,7 @@ export const ConcernCards: React.FC<ConcernCardsProps> = ({
             activeOpacity={0.9}
           >
             <LinearGradient
-              colors={concern.gradient}
+              colors={concern.gradient as any}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.concernCard}
@@ -50,7 +49,7 @@ export const ConcernCards: React.FC<ConcernCardsProps> = ({
               {/* Semi-transparent overlay for text readability */}
               <View style={styles.overlay} />
               
-              <Text variant="titleMedium" style={styles.concernName}>
+              <Text style={styles.concernName}>
                 {concern.name}
               </Text>
             </LinearGradient>
@@ -73,11 +72,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.marginMobile,
   },
   headerTitle: {
-    fontFamily: fontFamily.serif,
+    fontFamily: 'GoogleSansText-Bold',
     color: colors.primary,
     fontWeight: '600',
+    fontSize: fontSize.bodyLg,
   },
   viewAllText: {
+    fontFamily: 'GoogleSansText-Regular',
     color: colors.onSurfaceVariant,
     fontSize: 13,
   },
@@ -98,7 +99,7 @@ const styles = StyleSheet.create({
     width: 130,
     height: 100,
     borderRadius: 16,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     padding: spacing.md,
     overflow: 'hidden',
     position: 'relative',
@@ -112,8 +113,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   concernName: {
+    fontFamily: 'GoogleSansText-Medium',
     color: colors.primary,
     fontWeight: '600',
+    fontSize: 14,
     zIndex: 1,
   },
 });

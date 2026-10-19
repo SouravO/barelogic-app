@@ -1,8 +1,7 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { Text } from '@/components/ui/Text';
-import { colors, spacing } from '@/theme';
+import { colors, fontSize, spacing } from '@/theme';
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface KnowYourSkinCardProps {
   onStartScan?: () => void;
@@ -13,10 +12,10 @@ export const KnowYourSkinCard: React.FC<KnowYourSkinCardProps> = ({ onStartScan 
     <View style={styles.container}>
       {/* Left Section - Text & CTA */}
       <View style={styles.leftSection}>
-        <Text variant="headlineMedium" style={styles.title}>
+        <Text style={styles.title}>
           Know Your Skin
         </Text>
-        <Text variant="bodyMedium" style={styles.description}>
+        <Text style={styles.description}>
           Get a personalised{'\n'}skin analysis in seconds.
         </Text>
         <TouchableOpacity
@@ -24,7 +23,7 @@ export const KnowYourSkinCard: React.FC<KnowYourSkinCardProps> = ({ onStartScan 
           onPress={onStartScan}
           activeOpacity={0.9}
         >
-          <Text variant="labelLarge" style={styles.buttonText}>
+          <Text style={styles.buttonText}>
             Start Scan
           </Text>
           <Ionicons name="arrow-forward" size={16} color={colors.surface} />
@@ -49,14 +48,15 @@ export const KnowYourSkinCard: React.FC<KnowYourSkinCardProps> = ({ onStartScan 
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#D8E5ED', // Light blue-gray background matching UI design
+    backgroundColor: '#D8E5ED',
     borderRadius: 20,
-    padding: spacing.xl,
-    marginBottom: spacing.xl,
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 160,
+    height: 160,
     overflow: 'hidden',
     // Shadow for elevation
     shadowColor: colors.primary,
@@ -66,31 +66,37 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   leftSection: {
-    flex: 1,
-    paddingRight: spacing.md,
+    flex: 1
   },
   title: {
+    fontFamily: 'GoogleSansText-Bold',
     color: colors.primary,
     fontWeight: '600',
-    marginBottom: spacing.sm,
+    fontSize: fontSize.titleLg,
+    height:40
   },
   description: {
+    fontFamily: 'GoogleSansText-Regular',
     color: colors.onSurfaceVariant,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
     lineHeight: 22,
+    fontSize: fontSize.bodyMd,
   },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primary,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm + 8,
+    paddingVertical: spacing.sm,
     borderRadius: 24,
     alignSelf: 'flex-start',
     gap: spacing.xs,
+    marginTop: spacing.xs
   },
   buttonText: {
+    fontFamily: 'GoogleSansText-Medium',
     color: colors.surface,
+    fontSize: fontSize.bodySm,
     fontWeight: '600',
   },
   rightSection: {

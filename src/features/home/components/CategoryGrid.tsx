@@ -1,8 +1,7 @@
+import { colors, fontSize, spacing } from '@/theme';
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
-import { Text } from '@/components/ui/Text';
-import { colors, spacing, fontFamily } from '@/theme';
-import { PRODUCT_CATEGORIES, CategoryItem } from '../data/categories';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { CategoryItem, PRODUCT_CATEGORIES } from '../data/categories';
 
 interface CategoryGridProps {
   onCategoryPress?: (category: CategoryItem) => void;
@@ -17,11 +16,11 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
     <View style={styles.container}>
       {/* Section Header */}
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.headerTitle}>
+        <Text style={styles.headerTitle}>
           Shop by Category
         </Text>
         <TouchableOpacity onPress={onViewAllPress} activeOpacity={0.7}>
-          <Text variant="labelMedium" style={styles.viewAllText}>
+          <Text style={styles.viewAllText}>
             View All →
           </Text>
         </TouchableOpacity>
@@ -44,10 +43,10 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
               <Image
                 source={category.image}
                 style={styles.categoryImage}
-                resizeMode="contain"
+                resizeMode="cover"
               />
             </View>
-            <Text variant="labelMedium" style={styles.categoryName}>
+            <Text style={styles.categoryName}>
               {category.name}
             </Text>
           </TouchableOpacity>
@@ -69,11 +68,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.marginMobile,
   },
   headerTitle: {
-    fontFamily: fontFamily.serif,
+    fontFamily: 'GoogleSansText-Bold',
     color: colors.primary,
     fontWeight: '600',
+    fontSize: fontSize.bodyLg,
   },
   viewAllText: {
+    fontFamily: 'GoogleSansText-Regular',
     color: colors.onSurfaceVariant,
     fontSize: 13,
   },
@@ -93,7 +94,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.sm,
-    // Shadow for subtle elevation
+    overflow: 'hidden',
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -101,10 +102,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   categoryImage: {
-    width: 60,
-    height: 70,
+    width: '100%',
+    height: '100%',
   },
   categoryName: {
+    fontFamily: 'GoogleSansText-Regular',
     color: colors.onSurface,
     textAlign: 'center',
     fontSize: 13,

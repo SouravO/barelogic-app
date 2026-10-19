@@ -1,4 +1,3 @@
-import { Text } from '@/components/ui/Text';
 import { colors, fontSize, spacing } from '@/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
@@ -9,6 +8,7 @@ import {
   NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -124,18 +124,18 @@ const HeroSlideComponent: React.FC<{
           <View style={styles.contentContainer}>
             {/* Label */}
             <View style={styles.labelContainer}>
-              <Text variant="labelSmall" style={styles.label}>
+              <Text style={styles.label}>
                 {slide.label}
               </Text>
             </View>
 
             {/* Title */}
-            <Text variant="headlineLarge" style={styles.title}>
+            <Text style={styles.title}>
               {slide.title}
             </Text>
 
             {/* Description */}
-            <Text variant="bodyLarge" style={styles.description}>
+            <Text style={styles.description}>
               {slide.description}
             </Text>
 
@@ -145,7 +145,7 @@ const HeroSlideComponent: React.FC<{
               onPress={onPress}
               activeOpacity={0.9}
             >
-              <Text variant="labelLarge" style={styles.buttonText}>
+              <Text style={styles.buttonText}>
                 {slide.buttonText}
               </Text>
               <Ionicons name="arrow-forward" size={18} color={colors.onSurface} />
@@ -190,20 +190,23 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   label: {
+    fontFamily: 'GoogleSansText-Regular',
     color: colors.onPrimary,
     opacity: 0.95,
     letterSpacing: 1,
     textTransform: 'uppercase',
-    fontSize: fontSize.bodySm
+    fontSize: fontSize.bodySm,
   },
   title: {
+    fontFamily: 'GoogleSansText-Bold',
     color: colors.onPrimary,
-    fontWeight: '500',
+    fontWeight: '700',
     marginBottom: spacing.sm,
-    fontSize:fontSize.headlineMd,
-    lineHeight:28
+    fontSize: fontSize.headlineMd,
+    lineHeight: 28,
   },
   description: {
+    fontFamily: 'GoogleSansText-Regular',
     color: colors.onPrimary,
     opacity: 0.95,
     marginBottom: spacing.lg,
@@ -225,6 +228,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   buttonText: {
+    fontFamily: 'GoogleSansText-Bold',
     color: colors.onSurface,
     fontWeight: '700',
     fontSize: 13,
