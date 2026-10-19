@@ -33,7 +33,6 @@ export const HomeScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <Header
-        onMenuPress={() => Alert.alert('Menu', 'Notwo Navigation Menu')}
         onSearchPress={() => setIsSearchVisible(true)}
         onCartPress={() => router.push('/(tabs)/cart')}
         onNotificationPress={() => Alert.alert('Notifications', 'You have no new alerts.')}

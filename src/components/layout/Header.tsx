@@ -1,15 +1,14 @@
-import React from 'react';
-import { Ionicons, Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box } from '@/components/ui/box';
+import { Heading } from '@/components/ui/heading';
 import { HStack } from '@/components/ui/hstack';
 import { Pressable } from '@/components/ui/pressable';
-import { Heading } from '@/components/ui/heading';
 import { Text } from '@/components/ui/text';
 import { colors } from '@/theme';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface HeaderProps {
-  onMenuPress?: () => void;
   onSearchPress?: () => void;
   onCartPress?: () => void;
   onNotificationPress?: () => void;
@@ -22,7 +21,6 @@ const iconButton =
   'h-10 w-10 items-center justify-center rounded-full data-[active=true]:opacity-70';
 
 export const Header: React.FC<HeaderProps> = ({
-  onMenuPress,
   onSearchPress,
   onCartPress,
   cartCount = 0,
@@ -35,14 +33,6 @@ export const Header: React.FC<HeaderProps> = ({
       className="flex-row items-center justify-between bg-card px-6"
       style={{ paddingTop, height: 56 + paddingTop, zIndex: 100 }}
     >
-      <Pressable
-        className={iconButton}
-        onPress={onMenuPress}
-        accessibilityLabel="Menu"
-      >
-        <Feather name="menu" size={22} color={colors.onSurface} />
-      </Pressable>
-
       <Box className="items-center justify-center">
         <Heading size="xl" className="tracking-wider">
           NOTWO
