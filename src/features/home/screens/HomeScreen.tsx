@@ -1,16 +1,14 @@
 import { Header } from '@/components/layout/Header';
 import { SearchModal } from '@/components/SearchModal';
-import { Text } from '@/components/ui/Text';
 import { KysScannerModal } from '@/features/kys/components/KysScannerModal';
-import { colors, fontFamily, spacing } from '@/theme';
+import { colors, spacing } from '@/theme';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { EssentialsBanner } from '../components/EssentialsBanner';
-import { HeroBanner } from '../components/HeroBanner';
-import { NewFormulations } from '../components/NewFormulations';
-import { ProductCard } from '../components/ProductCard';
-import { BESTSELLERS } from '../data/products';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { CategoryGrid } from '../components/CategoryGrid';
+import { ConcernCards } from '../components/ConcernCards';
+import { HeroCarousel } from '../components/HeroCarousel';
+import { KnowYourSkinCard } from '../components/KnowYourSkinCard';
 import type { ProductItem } from '../types';
 
 export const HomeScreen: React.FC = () => {
@@ -32,13 +30,6 @@ export const HomeScreen: React.FC = () => {
     );
   };
 
-  const handleProductPress = (item: ProductItem) => {
-    Alert.alert(
-      item.title,
-      `${item.categoryTag} • ${item.price}\n\nClinical formulation designed for cellular barrier renewal.`
-    );
-  };
-
   return (
     <View style={styles.container}>
       <Header
@@ -54,47 +45,22 @@ export const HomeScreen: React.FC = () => {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero Section: KYS AI Tool */}
-        <HeroBanner onStartScan={() => setIsKysVisible(true)} />
+        {/* Hero Carousel */}
+        <HeroCarousel onSlidePress={(slide) => Alert.alert(slide.title, slide.description)} />
 
-        {/* Bestsellers Section */}
-        <View style={styles.sectionHeader}>
-          <Text variant="headlineMedium" style={styles.sectionTitle}>
-            Bestsellers
-          </Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/shop')} activeOpacity={0.7}>
-            <Text variant="labelMedium" style={styles.viewAllText}>
-              VIEW ALL
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* Know Your Skin Card */}
+        <KnowYourSkinCard onStartScan={() => setIsKysVisible(true)} />
 
-        <View style={styles.bestsellerGrid}>
-          {BESTSELLERS.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onAddToCart={handleAddToCart}
-              onPress={handleProductPress}
-            />
-          ))}
-        </View>
-
-        {/* Essentials Kit Banner */}
-        <EssentialsBanner
-          onPress={() =>
-            Alert.alert(
-              'The Essentials Kit',
-              'Curated 3-step regimen for compromised barriers. Includes Barrier Repair Complex, Lipid Cream, and Clarifying Solution.\n\nPrice: $140 (Save $45)'
-            )
-          }
+        {/* Shop by Category Section */}
+        <CategoryGrid
+          onCategoryPress={(category) => Alert.alert(category.name, `Browse ${category.name}`)}
+          onViewAllPress={() => router.push('/(tabs)/shop')}
         />
 
-        {/* New Formulations Section */}
-        <NewFormulations
-          onAddToCart={handleAddToCart}
-          onProductPress={handleProductPress}
-          onViewAll={() => router.push('/(tabs)/shop')}
+        {/* Shop by Concern Section */}
+        <ConcernCards
+          onConcernPress={(concern) => Alert.alert(concern.name, `Shop for ${concern.name}`)}
+          onViewAllPress={() => router.push('/(tabs)/shop')}
         />
       </ScrollView>
 
@@ -125,28 +91,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   contentContainer: {
-    paddingHorizontal: spacing.marginMobile,
+    paddingTop: spacing.md,
     paddingBottom: spacing.xxxl,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    paddingBottom: spacing.sm,
-    marginBottom: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.outlineVariant,
-  },
-  sectionTitle: {
-    fontFamily: fontFamily.serif,
-    color: colors.primary,
-  },
-  viewAllText: {
-    color: colors.onSurfaceVariant,
-  },
-  bestsellerGrid: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.sm,
   },
 });
