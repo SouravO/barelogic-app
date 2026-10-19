@@ -1,5 +1,5 @@
 import { Fonts, SaharaTheme } from '@/src/theme';
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
 
@@ -73,13 +73,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="cart"
+        name="routine"
         options={{
-          title: 'Cart',
-          tabBarIcon: ({ color }) => (
-            <Feather
-              name="shopping-bag"
-              size={22}
+          title: 'Routine',
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialCommunityIcons
+              name={focused ? 'calendar-check' : 'calendar-check-outline'}
+              size={24}
               color={color}
             />
           ),
@@ -96,6 +96,13 @@ export default function TabLayout() {
               color={color}
             />
           ),
+        }}
+      />
+      {/* Hide cart and explore tabs */}
+      <Tabs.Screen
+        name="cart"
+        options={{
+          href: null,
         }}
       />
       {/* Hide default explore tab if present */}
