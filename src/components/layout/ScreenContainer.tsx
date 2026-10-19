@@ -1,14 +1,9 @@
 import React from 'react';
-import {
-  View,
-  ScrollView,
-  StyleSheet,
-  ViewStyle,
-  StatusBar,
-  Platform,
-} from 'react-native';
+import { View, ScrollView, StyleSheet, StatusBar, Platform } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, spacing } from '@/theme';
+import { Box } from '@/components/ui/box';
+import { colors } from '@/theme';
 
 interface ScreenContainerProps {
   children: React.ReactNode;
@@ -29,12 +24,13 @@ export const ScreenContainer: React.FC<ScreenContainerProps> = ({
   padding = true,
   style,
 }) => {
-  const contentStyle = [
-    styles.content,
-    { backgroundColor },
-    padding && styles.padding,
-    style,
-  ];
+  // backgroundColor / caller `style` are runtime values, so they ride on `style`;
+  // layout (flex grow + horizontal padding) is expressed as className.
+  const contentStyle: ViewStyle = {
+    backgroundColor,
+    ...style,
+  };
+  const contentClass = padding ? 'grow px-4' : 'grow';
 
   const Container = safeArea ? SafeAreaView : View;
   const containerProps = safeArea ? { edges } : {};
@@ -50,7 +46,8 @@ export const ScreenContainer: React.FC<ScreenContainerProps> = ({
       />
       {scrollable ? (
         <ScrollView
-          style={styles.scrollView}
+          className="flex-1"
+          contentContainerClassName={contentClass}
           contentContainerStyle={contentStyle}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -58,7 +55,9 @@ export const ScreenContainer: React.FC<ScreenContainerProps> = ({
           {children}
         </ScrollView>
       ) : (
-        <View style={contentStyle}>{children}</View>
+        <Box className={contentClass} style={contentStyle}>
+          {children}
+        </Box>
       )}
     </Container>
   );
@@ -67,14 +66,5 @@ export const ScreenContainer: React.FC<ScreenContainerProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-  },
-  padding: {
-    paddingHorizontal: spacing.marginMobile,
   },
 });

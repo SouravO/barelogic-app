@@ -135,6 +135,12 @@ export const textStyles = {
     fontWeight: fontWeight.semibold,
     lineHeight: fontSize.headlineMd * lineHeight.normal,
   },
+  headlineSmall: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.headlineSm,
+    fontWeight: fontWeight.semibold,
+    lineHeight: fontSize.headlineSm * lineHeight.normal,
+  },
 
   // Title styles
   titleLarge: {

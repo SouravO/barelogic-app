@@ -1,43 +1,48 @@
 /**
  * Color palette for Notwo app
- * Based on Material Design 3 color system
+ * Modern blue-gray aesthetic with clean minimalist design
  */
 
 export const colors = {
-  // Primary colors
-  primary: '#C2652A',
+  // Primary colors - Cool blue-gray tones
+  primary: '#5B7B8F',
   onPrimary: '#FFFFFF',
-  primaryContainer: '#E08850',
-  onPrimaryContainer: '#FBE8D8',
+  primaryContainer: '#7A99AD',
+  onPrimaryContainer: '#E8EFF3',
 
   // Secondary colors
-  secondary: '#78706A',
+  secondary: '#8FA3B0',
   onSecondary: '#FFFFFF',
 
   // Tertiary colors
-  tertiary: '#8C3C3C',
+  tertiary: '#6B8796',
   onTertiary: '#FFFFFF',
 
-  // Background & Surface
-  background: '#FAF5EE',
-  onBackground: '#3A302A',
-  surface: '#FAF5EE',
-  onSurface: '#3A302A',
-  onSurfaceVariant: '#605850',
+  // Background & Surface - Light cool grays
+  background: '#F5F7F9',
+  onBackground: '#1E2A35',
+  surface: '#FFFFFF',
+  onSurface: '#1E2A35',
+  onSurfaceVariant: '#5B6B78',
 
-  // Surface containers
+  // Surface containers - Blue-gray shades
   surfaceContainerLowest: '#FFFFFF',
-  surfaceContainerLow: '#F6F0E8',
-  surfaceContainer: '#F2ECE4',
-  surfaceContainerHigh: '#ECE6DC',
-  surfaceContainerHighest: '#E6E0D6',
+  surfaceContainerLow: '#EDF1F4',
+  surfaceContainer: '#E5EAF0',
+  surfaceContainerHigh: '#D8E0E8',
+  surfaceContainerHighest: '#CDD6DF',
+
+  // Hero/Card backgrounds - Muted blue-gray
+  heroBackground: '#6A8599',
+  heroDark: '#5B7B8F',
+  cardBackground: '#FFFFFF',
 
   // Outline
-  outline: '#9A9088',
-  outlineVariant: '#D8D0C8',
+  outline: '#B8C5D0',
+  outlineVariant: '#DDE5EC',
 
   // Accent colors
-  accentBadge: '#C2652A',
+  accentBadge: '#5B7B8F',
   accentGreen: '#10B981',
   accentRed: '#DC2626',
   accentYellow: '#F59E0B',
@@ -49,7 +54,7 @@ export const colors = {
   onSuccess: '#FFFFFF',
   warning: '#F59E0B',
   onWarning: '#FFFFFF',
-  info: '#3B82F6',
+  info: '#5B7B8F',
   onInfo: '#FFFFFF',
 } as const;
 
@@ -63,7 +68,7 @@ export const lightTheme = {
   icon: colors.onSurfaceVariant,
   tabIconDefault: colors.secondary,
   tabIconSelected: colors.primary,
-  card: colors.surfaceContainerLow,
+  card: colors.cardBackground,
   border: colors.outlineVariant,
 };
 
@@ -74,8 +79,26 @@ export const darkTheme = {
   icon: colors.onSurfaceVariant,
   tabIconDefault: colors.secondary,
   tabIconSelected: colors.primary,
-  card: colors.surfaceContainerLow,
+  card: colors.cardBackground,
   border: colors.outlineVariant,
 };
 
 export type ThemeColors = typeof lightTheme;
+
+// Legacy exports for backward compatibility
+export const SaharaTheme = {
+  primary: colors.primary,
+  secondary: colors.secondary,
+  background: colors.background,
+  surface: colors.surface,
+  onSurface: colors.onSurface,
+  onSurfaceVariant: colors.onSurfaceVariant,
+  surfaceContainerLow: colors.surfaceContainerLow,
+  outline: colors.outline,
+  outlineVariant: colors.outlineVariant,
+};
+
+export const Colors = {
+  light: lightTheme,
+  dark: darkTheme,
+};
