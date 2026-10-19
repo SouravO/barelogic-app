@@ -4,20 +4,20 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Easing,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  Easing,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { SkinAnalysisResult } from '../types';
 import { analyzeSkinWithGemini, convertImageToBase64, testConnectivity } from '../services/geminiApi';
+import type { SkinAnalysisResult } from '../types';
 
 interface KysScannerModalProps {
   visible: boolean;
@@ -65,12 +65,25 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   const [cameraRef, setCameraRef] = useState<CameraView | null>(null);
   const [facing, setFacing] = useState<'front' | 'back'>('front');
   const [scanProgress] = useState(() => new Animated.Value(0));
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const scanLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
   const markerIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Derived: which slot are we filling next?
   const currentSlot = Math.min(capturedImages.length, MIN_PHOTOS - 1);
   const canAnalyze = capturedImages.length >= MIN_PHOTOS;
+
+  // Add delay before rendering camera
+  useEffect(() => {
+    if (visible && cameraPermission?.granted) {
+      setIsCameraReady(false);
+      const timer = setTimeout(() => {
+        setIsCameraReady(true);
+      }, 300); // 300ms delay for camera to initialize properly
+
+      return () => clearTimeout(timer);
+    }
+  }, [visible, cameraPermission?.granted]);
 
   const stopScanAnimation = () => {
     if (scanLoopRef.current) {
@@ -297,32 +310,41 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
             ) : (
               <>
                 <View style={styles.cameraWrapper}>
-                  <CameraView
-                    ref={(ref) => setCameraRef(ref)}
-                    style={styles.camera}
-                    facing={facing}
-                  />
-                  {/* Overlay */}
-                  <View style={styles.cameraOverlay}>
-                    <View style={styles.faceGuide} />
-                    <View style={styles.reticleCornerTL} />
-                    <View style={styles.reticleCornerTR} />
-                    <View style={styles.reticleCornerBL} />
-                    <View style={styles.reticleCornerBR} />
-                    {/* Angle prompt inside camera */}
-                    {!canAnalyze && (
-                      <View style={styles.anglePromptBanner}>
-                        <MaterialCommunityIcons
-                          name="face-man"
-                          size={16}
-                          color="#fff"
-                        />
-                        <Text style={styles.anglePromptText}>
-                          {ANGLE_PROMPTS[currentSlot].hint}
-                        </Text>
+                  {isCameraReady ? (
+                    <>
+                      <CameraView
+                        ref={(ref) => setCameraRef(ref)}
+                        style={styles.camera}
+                        facing={facing}
+                      />
+                      {/* Overlay */}
+                      <View style={styles.cameraOverlay}>
+                        <View style={styles.faceGuide} />
+                        <View style={styles.reticleCornerTL} />
+                        <View style={styles.reticleCornerTR} />
+                        <View style={styles.reticleCornerBL} />
+                        <View style={styles.reticleCornerBR} />
+                        {/* Angle prompt inside camera */}
+                        {!canAnalyze && (
+                          <View style={styles.anglePromptBanner}>
+                            <MaterialCommunityIcons
+                              name="face-man"
+                              size={16}
+                              color="#fff"
+                            />
+                            <Text style={styles.anglePromptText}>
+                              {ANGLE_PROMPTS[currentSlot].hint}
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                    )}
-                  </View>
+                    </>
+                  ) : (
+                    <View style={styles.cameraLoading}>
+                      <MaterialCommunityIcons name="camera" size={48} color={SaharaTheme.outlineVariant} />
+                      <Text style={styles.cameraLoadingText}>Initializing camera...</Text>
+                    </View>
+                  )}
                 </View>
 
                 {/* Thumbnail slots */}
@@ -676,9 +698,28 @@ const styles = StyleSheet.create({
   cameraWrapper: {
     flex: 1,
     position: 'relative',
+    minHeight: 400,
   },
   camera: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
+  cameraLoading: {
     flex: 1,
+    backgroundColor: SaharaTheme.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  cameraLoadingText: {
+    fontFamily: Fonts?.sans,
+    fontSize: 14,
+    color: SaharaTheme.onSurfaceVariant,
   },
   cameraOverlay: {
     position: 'absolute',
