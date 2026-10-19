@@ -5,10 +5,13 @@ import { colors, spacing } from '@/theme';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { BestsellerSection } from '../components/BestsellerSection';
 import { CategoryGrid } from '../components/CategoryGrid';
 import { ConcernCards } from '../components/ConcernCards';
+import { ForYouCard } from '../components/ForYouCard';
 import { HeroCarousel } from '../components/HeroCarousel';
 import { KnowYourSkinCard } from '../components/KnowYourSkinCard';
+import { MyRoutineSection } from '../components/MyRoutineSection';
 import type { ProductItem } from '../types';
 
 export const HomeScreen: React.FC = () => {
@@ -60,6 +63,25 @@ export const HomeScreen: React.FC = () => {
         <ConcernCards
           onConcernPress={(concern) => Alert.alert(concern.name, `Shop for ${concern.name}`)}
           onViewAllPress={() => router.push('/(tabs)/shop')}
+        />
+
+        {/* Bestsellers Section */}
+        <BestsellerSection
+          onViewAllPress={() => router.push('/(tabs)/shop')}
+          onProductPress={(product) => Alert.alert(product.name, product.category)}
+          onAddToCart={(product) => {
+            setCartCount((prev) => prev + 1);
+            Alert.alert('Added to Cart', `${product.name} added to your cart`);
+          }}
+        />
+
+        {/* For You Card */}
+        <ForYouCard onViewPicksPress={() => setIsKysVisible(true)} />
+
+        {/* My Routine Section */}
+        <MyRoutineSection
+          onViewAllPress={() => Alert.alert('My Routine', 'View all routines')}
+          onRoutinePress={(routine) => Alert.alert(`${routine.charAt(0).toUpperCase() + routine.slice(1)} Routine`, 'View routine details')}
         />
       </ScrollView>
 

@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   leftSection: {
-    flex: 1
+    flex: 1,
   },
   title: {
     fontFamily: 'GoogleSansText-Bold',
