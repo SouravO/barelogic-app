@@ -18,6 +18,10 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# build artifacts
+*.apk
+*.aab
+
 # Metro
 .metro-health-check*
 
@@ -42,3 +46,5 @@ app-example
 # generated native folders
 /ios
 /android
+.agents
+agent/

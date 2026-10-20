@@ -1,20 +1,36 @@
-import React, { useState } from 'react';
+import { KysScannerModal } from '@/features/kys/components/KysScannerModal';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { SaharaTheme } from '@/constants/theme';
-import { Header } from '@/components/Header';
-import { HeroBanner } from '@/components/HeroBanner';
-import { KysScannerModal } from '@/components/KysScannerModal';
 
-export default function KysScreen() {
-  const [modalVisible, setModalVisible] = useState(false);
+export default function KysRoute() {
+  const router = useRouter();
+  const [isVisible, setIsVisible] = useState(false);
+
+  // Open modal every time this tab becomes focused
+  useFocusEffect(
+    useCallback(() => {
+      setIsVisible(true);
+      
+      return () => {
+        // Cleanup when leaving the tab
+        setIsVisible(false);
+      };
+    }, [])
+  );
+
+  const handleClose = () => {
+    setIsVisible(false);
+    // Navigate back to home after closing
+    router.push('/');
+  };
 
   return (
     <View style={styles.container}>
-      <Header />
-      <View style={styles.content}>
-        <HeroBanner onStartScan={() => setModalVisible(true)} />
-      </View>
-      <KysScannerModal visible={modalVisible} onClose={() => setModalVisible(false)} />
+      <KysScannerModal
+        visible={isVisible}
+        onClose={handleClose}
+      />
     </View>
   );
 }
@@ -22,10 +38,5 @@ export default function KysScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: SaharaTheme.surface,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
   },
 });

@@ -1,36 +1,61 @@
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import React from 'react';
-import { Platform } from 'react-native';
-import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import { SaharaTheme, Fonts } from '@/constants/theme';
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const INACTIVE_ICON = '#879295';
+const ACTIVE_CIRCLE = '#b9d2de85';
+const ACTIVE_ICON = '#075B5A';
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: SaharaTheme.primary,
-        tabBarInactiveTintColor: SaharaTheme.secondary,
         headerShown: false,
+        tabBarShowLabel: true,
+        tabBarActiveTintColor: ACTIVE_ICON,
+        tabBarInactiveTintColor: INACTIVE_ICON,
+        tabBarActiveBackgroundColor: ACTIVE_CIRCLE,
+        sceneStyle: {
+          paddingBottom: 60 + bottomInset + 12,
+        },
         tabBarStyle: {
-          backgroundColor: SaharaTheme.surface,
-          borderTopWidth: 1,
-          borderTopColor: `${SaharaTheme.outlineVariant}60`,
-          height: Platform.OS === 'ios' ? 84 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
-          paddingTop: 8,
-          elevation: 8,
-          shadowColor: '#3A302A',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
+          position: 'absolute',
+          left: 16,
+          right: 16,
+          bottom: bottomInset + 6,
+          height: 60,
+          borderRadius: 999,
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 0,
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          marginHorizontal:12,
+          elevation: 2,
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.04,
           shadowRadius: 6,
+          overflow: 'hidden',
+        },
+        tabBarItemStyle: {
+          borderRadius: 24,
+          marginHorizontal: 4,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 8,
+          overflow: 'hidden',
+        },
+        tabBarIconStyle: {
+          marginBottom: -4,
         },
         tabBarLabelStyle: {
-          fontFamily: Fonts?.sans,
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: '600',
-          letterSpacing: 0.8,
-          textTransform: 'uppercase',
-          marginTop: 2,
+          letterSpacing: 0.3
         },
       }}
     >
@@ -38,12 +63,12 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <MaterialCommunityIcons
-              name={focused ? 'home' : 'home-outline'}
-              size={24}
-              color={color}
-            />
+                name="home-outline"
+                size={20}
+                color={focused ? ACTIVE_ICON : INACTIVE_ICON}
+              />
           ),
         }}
       />
@@ -51,12 +76,12 @@ export default function TabLayout() {
         name="shop"
         options={{
           title: 'Shop',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <MaterialCommunityIcons
-              name={focused ? 'storefront' : 'storefront-outline'}
-              size={24}
-              color={color}
-            />
+                name="storefront-outline"
+                size={20}
+                color={focused ? ACTIVE_ICON : INACTIVE_ICON}
+              />
           ),
         }}
       />
@@ -64,25 +89,25 @@ export default function TabLayout() {
         name="kys"
         options={{
           title: 'KYS',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <MaterialCommunityIcons
-              name={focused ? 'face-man-profile' : 'face-man-outline'}
-              size={24}
-              color={color}
-            />
+                name="face-man-outline"
+                size={22}
+                color={focused ? ACTIVE_ICON : INACTIVE_ICON}
+              />
           ),
         }}
       />
       <Tabs.Screen
-        name="cart"
+        name="routine"
         options={{
-          title: 'Cart',
-          tabBarIcon: ({ color, focused }) => (
-            <Feather
-              name="shopping-bag"
-              size={22}
-              color={color}
-            />
+          title: 'Routine',
+          tabBarIcon: ({ focused }) => (
+            <MaterialCommunityIcons
+                name="calendar-check-outline"
+                size={20}
+                color={focused ? ACTIVE_ICON : INACTIVE_ICON}
+              />
           ),
         }}
       />
@@ -90,13 +115,21 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <Ionicons
-              name={focused ? 'person' : 'person-outline'}
-              size={22}
-              color={color}
-            />
+                name="person-outline"
+                size={20}
+                color={focused ? ACTIVE_ICON : INACTIVE_ICON}
+              />
           ),
+        }}
+      />
+      {/* Cart is a focused checkout screen: hide tab and tab bar */}
+      <Tabs.Screen
+        name="cart"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' },
         }}
       />
       {/* Hide default explore tab if present */}
@@ -109,3 +142,4 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+

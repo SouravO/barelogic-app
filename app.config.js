@@ -2,8 +2,8 @@ const withSplashScreenFix = require('./plugins/withSplashScreenFix');
 
 module.exports = {
   expo: {
-    name: "barelogic-app",
-    slug: "barelogic-app",
+    name: "notwo-app",
+    slug: "notwo-app",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
@@ -16,7 +16,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.barelogic.app",
+      bundleIdentifier: "com.notwo.app",
       infoPlist: {
         NSCameraUsageDescription: "We need camera access to analyze your skin for personalized recommendations",
         NSPhotoLibraryUsageDescription: "We need photo library access to upload images for skin analysis"
@@ -27,7 +27,7 @@ module.exports = {
         foregroundImage: "./assets/images/android-icon-foreground.png",
         backgroundColor: "#ffffff"
       },
-      package: "com.barelogic.app",
+      package: "com.notwo.app",
       permissions: [
         "CAMERA",
         "READ_MEDIA_IMAGES"
@@ -41,6 +41,10 @@ module.exports = {
     },
     plugins: [
       "expo-router",
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser",
       [
         "expo-splash-screen",
         {
@@ -80,7 +84,7 @@ module.exports = {
     extra: {
       router: {},
       eas: {
-        projectId: "8e1e73c3-8001-4a84-b8fb-a86d7d4d1b35"
+        projectId: "ce89b66f-c23e-4121-ba9a-7b0783e7540c"
       }
     }
   }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,9 +7,10 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { SaharaTheme, Fonts } from '@/constants/theme';
-import { Header } from '@/components/Header';
-import { ProductCard, ProductItem } from '@/components/ProductCard';
+import { SaharaTheme, Fonts } from '@/src/theme';
+import { Header } from '@/components/layout/Header';
+import { ProductCard } from '@/features/home/components/ProductCard';
+import type { ProductItem } from '@/features/home/types';
 
 const CATEGORIES = ['ALL', 'SERUMS', 'MOISTURIZERS', 'TONERS', 'EYE CARE', 'SETS'];
 
