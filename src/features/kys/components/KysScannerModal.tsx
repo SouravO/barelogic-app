@@ -71,6 +71,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   const [analysisResult, setAnalysisResult] = useState<SkinAnalysisResult | null>(null);
   const { hasPermission, requestPermission: requestCameraPermission } = useCameraPermission();
   const cameraRef = React.useRef<any>(null);
+  const bottomPanelRef = React.useRef<ScrollView>(null);
   const [cameraPosition, setCameraPosition] = useState<'front' | 'back'>('front');
   const device = useCameraDevice(cameraPosition);
   const [scanProgress] = useState(() => new Animated.Value(0));
@@ -454,6 +455,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
     setAnalysisResult(null);
     setStage('capture');
     setCaptureMode('automatic');
+    bottomPanelRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   const translateY = scanProgress.interpolate({
@@ -467,7 +469,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
         {/* Header */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 12 }]}>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-            <Ionicons name="close" size={24} color={SaharaTheme.onSurface} />
+            <Ionicons name="close" size={24} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.titleBox}>
@@ -479,6 +481,13 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
                   : 'Ready to Analyse'
                 : '14-Marker AI Scan'}
             </Text>
+            {stage === 'capture' && (
+              <View style={styles.modePill}>
+                <Text style={styles.modePillText}>
+                  {captureMode === 'automatic' ? 'AUTO' : 'MANUAL'}
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={{ width: 40 }} />
@@ -587,119 +596,127 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
                   )}
                 </View>
 
-                {/* Progress Bar - shows in automatic mode */}
-                {captureMode === 'automatic' && guidedCapture.state !== CaptureState.PHOTO_REVIEW && (
-                  <CaptureProgressBar
-                    currentStep={
-                      guidedCapture.targetPose === 'front' ? 0 : 
-                      guidedCapture.targetPose === 'left' ? 1 : 2
-                    }
-                    completedSteps={[
-                      capturedImages[0] !== null,
-                      capturedImages[1] !== null,
-                      capturedImages[2] !== null,
-                    ]}
-                  />
-                )}
+                <ScrollView
+                  ref={bottomPanelRef}
+                  style={styles.bottomPanel}
+                  contentContainerStyle={styles.bottomPanelContent}
+                  showsVerticalScrollIndicator={false}
+                  bounces={false}
+                >
+                  {/* Progress Bar - shows in automatic mode */}
+                  {captureMode === 'automatic' && guidedCapture.state !== CaptureState.PHOTO_REVIEW && (
+                    <CaptureProgressBar
+                      currentStep={
+                        guidedCapture.targetPose === 'front' ? 0 : 
+                        guidedCapture.targetPose === 'left' ? 1 : 2
+                      }
+                      completedSteps={[
+                        capturedImages[0] !== null,
+                        capturedImages[1] !== null,
+                        capturedImages[2] !== null,
+                      ]}
+                    />
+                  )}
 
-                {/* Photo Review Grid - shown when photos are captured */}
-                {(guidedCapture.state === CaptureState.PHOTO_REVIEW || canAnalyze) && (
-                  <PhotoReviewGrid
-                    capturedImages={capturedImages}
-                    labels={['Front', 'Left', 'Right']}
-                    onRetake={handleRetakePhoto}
-                    disabled={stage !== 'capture'}
-                  />
-                )}
+                  {/* Photo Review Grid - shown when photos are captured */}
+                  {(guidedCapture.state === CaptureState.PHOTO_REVIEW || canAnalyze) && (
+                    <PhotoReviewGrid
+                      capturedImages={capturedImages}
+                      labels={['Front', 'Left', 'Right']}
+                      onRetake={handleRetakePhoto}
+                      disabled={stage !== 'capture'}
+                    />
+                  )}
 
-                {/* Thumbnail slots - shown in manual mode */}
-                {captureMode === 'manual' && !canAnalyze && (
-                  <View style={styles.thumbnailRow}>
-                    {Array.from({ length: MIN_PHOTOS }).map((_, i) => (
-                      <View key={i} style={styles.thumbnailSlot}>
-                        {capturedImages[i] ? (
-                          <>
-                            <Image
-                              source={{ uri: capturedImages[i] }}
-                              style={styles.thumbnailImage}
-                              resizeMode="cover"
-                            />
-                            <TouchableOpacity
-                              style={styles.thumbnailRemoveBtn}
-                              onPress={() => handleRetakePhoto(i as 0 | 1 | 2)}
-                              activeOpacity={0.8}
-                            >
-                              <Ionicons name="close-circle" size={18} color="#fff" />
-                            </TouchableOpacity>
-                          </>
-                        ) : (
-                          <View style={styles.thumbnailEmpty}>
-                            <Ionicons
-                              name="camera-outline"
-                              size={22}
-                              color={i === currentSlot ? SaharaTheme.primary : SaharaTheme.outlineVariant}
-                            />
-                            <Text style={[
-                              styles.thumbnailSlotLabel,
-                              i === currentSlot && { color: SaharaTheme.primary },
-                            ]}>
-                              {['Front', 'Left', 'Right'][i]}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <View style={styles.captureControls}>
-                  {/* Manual mode button row */}
-                  {captureMode === 'manual' && (
-                    <View style={styles.buttonRow}>
-                      <TouchableOpacity
-                        style={styles.flipBtn}
-                        onPress={() => setCameraPosition(cameraPosition === 'front' ? 'back' : 'front')}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name="camera-reverse" size={28} color={SaharaTheme.onSurface} />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[styles.captureBtn, canAnalyze && styles.captureBtnDisabled]}
-                        onPress={canAnalyze ? undefined : handleTakePhoto}
-                        activeOpacity={0.8}
-                        disabled={canAnalyze}
-                      >
-                        <View style={styles.captureBtnInner} />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.galleryBtn}
-                        onPress={canAnalyze ? undefined : handlePickImage}
-                        activeOpacity={0.7}
-                        disabled={canAnalyze}
-                      >
-                        <Ionicons
-                          name="images"
-                          size={28}
-                          color={canAnalyze ? SaharaTheme.outlineVariant : SaharaTheme.onSurface}
-                        />
-                      </TouchableOpacity>
+                  {/* Thumbnail slots - shown in manual mode */}
+                  {captureMode === 'manual' && !canAnalyze && (
+                    <View style={styles.thumbnailRow}>
+                      {Array.from({ length: MIN_PHOTOS }).map((_, i) => (
+                        <View key={i} style={styles.thumbnailSlot}>
+                          {capturedImages[i] ? (
+                            <>
+                              <Image
+                                source={{ uri: capturedImages[i] }}
+                                style={styles.thumbnailImage}
+                                resizeMode="cover"
+                              />
+                              <TouchableOpacity
+                                style={styles.thumbnailRemoveBtn}
+                                onPress={() => handleRetakePhoto(i as 0 | 1 | 2)}
+                                activeOpacity={0.8}
+                              >
+                                <Ionicons name="close-circle" size={18} color="#fff" />
+                              </TouchableOpacity>
+                            </>
+                          ) : (
+                            <View style={styles.thumbnailEmpty}>
+                              <Ionicons
+                                name="camera-outline"
+                                size={22}
+                                color={i === currentSlot ? SaharaTheme.primary : SaharaTheme.outlineVariant}
+                              />
+                              <Text style={[
+                                styles.thumbnailSlotLabel,
+                                i === currentSlot && { color: SaharaTheme.primary },
+                              ]}>
+                                {['Front', 'Left', 'Right'][i]}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      ))}
                     </View>
                   )}
 
-                  {/* START ANALYSIS — only shown when 3 images ready */}
-                  {canAnalyze && (
-                    <TouchableOpacity
-                      style={styles.analyseBtn}
-                      onPress={startAnalysis}
-                      activeOpacity={0.88}
-                    >
-                      <MaterialCommunityIcons name="radar" size={20} color="#fff" />
-                      <Text style={styles.analyseBtnText}>START ANALYSIS</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                  <View style={styles.captureControls}>
+                    {/* Manual mode button row */}
+                    {captureMode === 'manual' && (
+                      <View style={styles.buttonRow}>
+                        <TouchableOpacity
+                          style={styles.flipBtn}
+                          onPress={() => setCameraPosition(cameraPosition === 'front' ? 'back' : 'front')}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="camera-reverse" size={28} color={SaharaTheme.onSurface} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.captureBtn, canAnalyze && styles.captureBtnDisabled]}
+                          onPress={canAnalyze ? undefined : handleTakePhoto}
+                          activeOpacity={0.8}
+                          disabled={canAnalyze}
+                        >
+                          <View style={styles.captureBtnInner} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.galleryBtn}
+                          onPress={canAnalyze ? undefined : handlePickImage}
+                          activeOpacity={0.7}
+                          disabled={canAnalyze}
+                        >
+                          <Ionicons
+                            name="images"
+                            size={28}
+                            color={canAnalyze ? SaharaTheme.outlineVariant : SaharaTheme.onSurface}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {/* START ANALYSIS — only shown when 3 images ready */}
+                    {canAnalyze && (
+                      <TouchableOpacity
+                        style={styles.analyseBtn}
+                        onPress={startAnalysis}
+                        activeOpacity={0.88}
+                      >
+                        <MaterialCommunityIcons name="radar" size={20} color="#fff" />
+                        <Text style={styles.analyseBtnText}>START ANALYSIS</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </ScrollView>
               </>
             )}
           </View>
@@ -897,7 +914,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: SaharaTheme.background,
+    backgroundColor: '#050816',
   },
   header: {
     flexDirection: 'row',
@@ -907,7 +924,10 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: SaharaTheme.outlineVariant,
+    borderBottomColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#050816',
+    zIndex: 20,
+    elevation: 4,
   },
   closeBtn: {
     width: 40,
@@ -918,6 +938,21 @@ const styles = StyleSheet.create({
   },
   titleBox: {
     alignItems: 'center',
+    gap: 6,
+  },
+  modePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  modePillText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   headerTitle: {
     fontFamily: Fonts?.sans,
@@ -929,11 +964,12 @@ const styles = StyleSheet.create({
   headerSub: {
     fontFamily: Fonts?.serif,
     fontSize: 16,
-    color: SaharaTheme.onSurface,
+    color: '#FFFFFF',
   },
   // Capture Stage Styles
   captureContainer: {
     flex: 1,
+    overflow: 'hidden',
   },
   permissionContainer: {
     flex: 1,
@@ -945,7 +981,7 @@ const styles = StyleSheet.create({
   permissionText: {
     fontFamily: Fonts?.sans,
     fontSize: 16,
-    color: SaharaTheme.onSurfaceVariant,
+    color: 'rgba(255, 255, 255, 0.72)',
     textAlign: 'center',
   },
   permissionBtn: {
@@ -956,7 +992,7 @@ const styles = StyleSheet.create({
     minWidth: 200,
   },
   uploadBtn: {
-    backgroundColor: SaharaTheme.surfaceContainerLow,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
   permissionBtnText: {
     color: SaharaTheme.onPrimary,
@@ -968,7 +1004,15 @@ const styles = StyleSheet.create({
   cameraWrapper: {
     flex: 1,
     position: 'relative',
-    minHeight: 400,
+    minHeight: 260,
+    overflow: 'hidden',
+  },
+  bottomPanel: {
+    maxHeight: '46%',
+    backgroundColor: 'rgba(5, 8, 22, 0.92)',
+  },
+  bottomPanelContent: {
+    paddingBottom: 12,
   },
   camera: {
     position: 'absolute',
@@ -981,7 +1025,7 @@ const styles = StyleSheet.create({
   },
   cameraLoading: {
     flex: 1,
-    backgroundColor: SaharaTheme.surfaceContainerLow,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
@@ -1011,11 +1055,13 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   captureControls: {
-    paddingVertical: 30,
+    paddingVertical: 24,
     paddingHorizontal: 24,
-    backgroundColor: SaharaTheme.surface,
+    backgroundColor: 'rgba(5, 8, 22, 0.92)',
     alignItems: 'center',
     gap: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255, 255, 255, 0.12)',
   },
 
   buttonRow: {
@@ -1086,7 +1132,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 14,
     paddingHorizontal: 20,
-    backgroundColor: SaharaTheme.surface,
+    backgroundColor: 'rgba(5, 8, 22, 0.92)',
   },
   thumbnailSlot: {
     width: 80,
@@ -1234,10 +1280,12 @@ const styles = StyleSheet.create({
   },
   statusBox: {
     width: '100%',
-    backgroundColor: SaharaTheme.surfaceContainerLow,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     padding: 20,
     borderRadius: 16,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   statusRow: {
     flexDirection: 'row',
@@ -1255,7 +1303,7 @@ const styles = StyleSheet.create({
   markerName: {
     fontFamily: Fonts?.serif,
     fontSize: 18,
-    color: SaharaTheme.onSurface,
+    color: '#FFFFFF',
     marginBottom: 16,
   },
   progressBarBg: {

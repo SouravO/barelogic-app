@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { Header } from '@/components/layout/Header';
-import { colors } from '@/theme';
-import { HeroBanner } from '@/features/home/components/HeroBanner';
+import { colors, spacing } from '@/theme';
+import { ScanHeroCard } from '../components/ScanHeroCard';
+import { ScanSteps } from '../components/ScanSteps';
+import { ScanTips } from '../components/ScanTips';
 import { KysScannerModal } from '../components/KysScannerModal';
 
 export const KysScreen: React.FC = () => {
@@ -13,13 +15,24 @@ export const KysScreen: React.FC = () => {
     <View style={styles.container}>
       <Header />
       <ScreenContainer style={styles.content} padding>
-        <HeroBanner onStartScan={() => setModalVisible(true)} />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <ScanHeroCard onStartScan={() => setModalVisible(true)} />
+          <View style={styles.section}>
+            <ScanSteps />
+          </View>
+          <View style={styles.section}>
+            <ScanTips />
+          </View>
+        </ScrollView>
       </ScreenContainer>
-      
-      <KysScannerModal 
+
+      <KysScannerModal
         key={modalVisible ? 'open' : 'closed'}
-        visible={modalVisible} 
-        onClose={() => setModalVisible(false)} 
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
       />
     </View>
   );
@@ -32,5 +45,12 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: spacing.xxl,
+    gap: spacing.lg,
+  },
+  section: {
+    marginTop: spacing.sm,
   },
 });

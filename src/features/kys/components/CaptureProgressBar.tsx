@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     paddingHorizontal: 20,
-    backgroundColor: SaharaTheme.surface,
+    backgroundColor: 'rgba(5, 8, 22, 0.92)',
   },
   stepContainer: {
     alignItems: 'center',
@@ -172,11 +172,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   stepCircleInactive: {
-    backgroundColor: SaharaTheme.surfaceContainerLow,
-    borderColor: SaharaTheme.outlineVariant,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   stepCircleActive: {
-    backgroundColor: SaharaTheme.surfaceContainerLow,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderColor: SaharaTheme.primary,
     borderWidth: 3,
   },
@@ -188,11 +188,11 @@ const styles = StyleSheet.create({
     fontFamily: Fonts?.sans,
     fontSize: 10,
     fontWeight: '600',
-    color: SaharaTheme.onSurfaceVariant,
+    color: 'rgba(255, 255, 255, 0.65)',
     letterSpacing: 0.8,
   },
   stepLabelActive: {
-    color: SaharaTheme.primary,
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   connector: {

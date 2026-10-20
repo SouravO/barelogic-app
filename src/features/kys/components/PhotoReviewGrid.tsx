@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 14,
     paddingHorizontal: 20,
-    backgroundColor: SaharaTheme.surface,
+    backgroundColor: 'rgba(5, 8, 22, 0.92)',
   },
   slot: {
     width: 90,
@@ -114,8 +114,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderStyle: 'dashed',
-    borderColor: SaharaTheme.outlineVariant,
-    backgroundColor: SaharaTheme.surfaceContainerLow,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts?.sans,
     fontSize: 10,
     fontWeight: '600',
-    color: SaharaTheme.onSurfaceVariant,
+    color: 'rgba(255, 255, 255, 0.65)',
     letterSpacing: 0.5,
   },
   photoContainer: {
