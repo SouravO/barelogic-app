@@ -1,23 +1,32 @@
 import { Fonts, SaharaTheme } from '@/theme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  Animated,
-  Easing,
+  Animated, Dimensions, Easing,
   Image,
   Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
+import { useFaceScannerOutput } from 'vision-camera-face-detection';
+import { useCaptureAccessibility } from '../hooks/useCaptureAccessibility';
+import { useCountdownTimer } from '../hooks/useCountdownTimer';
+
+import { useGuidedCapture } from '../hooks/useGuidedCapture';
 import { analyzeSkinWithGemini, convertImageToBase64, testConnectivity } from '../services/geminiApi';
 import type { SkinAnalysisResult } from '../types';
+import type { CaptureMode, FaceDetectionResult } from '../types/selfie-capture.types';
+import { CaptureState } from '../types/selfie-capture.types';
+import { CaptureProgressBar } from './CaptureProgressBar';
+import { FaceGuideOverlay } from './FaceGuideOverlay';
+import { PhotoReviewGrid } from './PhotoReviewGrid';
 
 interface KysScannerModalProps {
   visible: boolean;
@@ -59,31 +68,196 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   const insets = useSafeAreaInsets();
   const [stage, setStage] = useState<'capture' | 'scanning' | 'results'>('capture');
   const [activeMarkerIndex, setActiveMarkerIndex] = useState(0);
-  const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [analysisResult, setAnalysisResult] = useState<SkinAnalysisResult | null>(null);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [cameraRef, setCameraRef] = useState<CameraView | null>(null);
-  const [facing, setFacing] = useState<'front' | 'back'>('front');
+  const { hasPermission, requestPermission: requestCameraPermission } = useCameraPermission();
+  const cameraRef = React.useRef<any>(null);
+  const [cameraPosition, setCameraPosition] = useState<'front' | 'back'>('front');
+  const device = useCameraDevice(cameraPosition);
   const [scanProgress] = useState(() => new Animated.Value(0));
+  const [flashAnim] = useState(() => new Animated.Value(0));
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [captureMode, setCaptureMode] = useState<CaptureMode>('automatic');
   const scanLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
   const markerIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Derived: which slot are we filling next?
-  const currentSlot = Math.min(capturedImages.length, MIN_PHOTOS - 1);
-  const canAnalyze = capturedImages.length >= MIN_PHOTOS;
+  // Guided capture hooks
+  const guidedCapture = useGuidedCapture();
+  const countdown = useCountdownTimer(3000);
+  const accessibility = useCaptureAccessibility(true); // Voice + haptics enabled
 
-  // Add delay before rendering camera
+  // Throttle face detection callbacks to ~12 fps
+  const lastFaceCallbackRef = React.useRef<number>(0);
+
+  const scannerOutput = useFaceScannerOutput({
+    onFaceScanned: (faces) => {
+      if (captureMode !== 'automatic' || stage !== 'capture') return;
+      const now = Date.now();
+      if (now - lastFaceCallbackRef.current < 83) return;
+      lastFaceCallbackRef.current = now;
+
+      if (faces.length === 0) {
+        guidedCapture.handleFaceDetected({ faceDetected: false, faceCount: 0 } as any);
+        return;
+      }
+
+      const face = faces[0];
+      const b = face.bounds;
+      const screenW = Dimensions.get('window').width;
+      const screenH = Dimensions.get('window').height;
+
+      // Normalize center (autoMode gives screen-space bounds)
+      const centerX = (b.x + b.width / 2) / screenW;
+      const centerY = (b.y + b.height / 2) / screenH;
+      const faceWidthRatio = b.width / screenW;
+
+      // Require the face to be reasonably centered and large enough within the guide
+      console.log('FACE', { centerX, centerY, faceWidthRatio, faceHeightRatio: b.height / screenH, bounds: b });
+      const faceHeightRatio = b.height / screenH;
+      const inGuide =
+        faces.length === 1 &&
+        centerX > 0.35 && centerX < 0.65 &&
+        centerY > 0.3 && centerY < 0.6 &&
+        faceWidthRatio > 0.35 && faceWidthRatio < 0.8 &&
+        faceHeightRatio > 0.45 && faceHeightRatio < 0.9;
+
+      const result = inGuide
+        ? {
+            faceDetected: true,
+            faceCount: 1,
+            bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
+            headPose: { yaw: face.yawAngle, pitch: face.pitchAngle, roll: face.rollAngle },
+            confidence: 1,
+          }
+        : { faceDetected: false, faceCount: faces.length };
+
+      guidedCapture.handleFaceDetected(result as FaceDetectionResult);
+    },
+    onError: (err) => console.warn('Face scan error:', err),
+    autoMode: true,
+    windowWidth: Dimensions.get('window').width,
+    windowHeight: Dimensions.get('window').height,
+    cameraFacing: 'front',
+    outputResolution: 'preview',
+  });
+
+  const photoOutput = usePhotoOutput({ qualityPrioritization: 'speed' });
+  const cameraOutputsRef = React.useRef<any>(null);
+  if (!cameraOutputsRef.current) {
+    cameraOutputsRef.current = [scannerOutput, photoOutput];
+  }
+  const cameraOutputs = cameraOutputsRef.current;
+
+  // Derived: which slot are we filling next?
+  const capturedImages = guidedCapture.capturedImages;
+  const currentSlot = capturedImages.filter(img => img !== null).length;
+  const canAnalyze = capturedImages.filter(img => img !== null).length >= MIN_PHOTOS;
+
+  // Initialize guided capture when modal opens
   useEffect(() => {
-    if (visible && cameraPermission?.granted) {
-      setIsCameraReady(false);
+    if (visible && hasPermission && stage === 'capture' && !isCameraReady) {
       const timer = setTimeout(() => {
         setIsCameraReady(true);
       }, 300); // 300ms delay for camera to initialize properly
 
       return () => clearTimeout(timer);
     }
-  }, [visible, cameraPermission?.granted]);
+  }, [visible, hasPermission, stage, isCameraReady]);
+
+  // Start guided capture when camera is ready
+  useEffect(() => {
+    if (isCameraReady && captureMode === 'automatic' && stage === 'capture') {
+      guidedCapture.startCapture();
+    }
+  }, [isCameraReady, captureMode, stage]);
+
+  // Real face detection now runs via VisionCamera scanner output (no mock)
+
+  // Handle countdown coordination
+  useEffect(() => {
+    if (guidedCapture.isCountingDown && !countdown.isCountingDown) {
+      // Start countdown
+      countdown.startCountdown(() => {
+        guidedCapture.handleCountdownComplete();
+      });
+      
+    } else if (!guidedCapture.isCountingDown && countdown.isCountingDown) {
+      // Cancel countdown if pose becomes invalid
+      countdown.cancelCountdown();
+    }
+  }, [guidedCapture.isCountingDown, countdown.isCountingDown]);
+
+  // Trigger photo capture when state transitions to CAPTURING
+  useEffect(() => {
+    const capturingStates = [
+      CaptureState.CAPTURING_FRONT,
+      CaptureState.CAPTURING_LEFT,
+      CaptureState.CAPTURING_RIGHT,
+    ];
+    
+    if (capturingStates.includes(guidedCapture.state)) {
+      handleAutomaticCapture();
+    }
+  }, [guidedCapture.state]);
+
+  // Announce concise directional prompts only (not "capturing")
+  useEffect(() => {
+    if (captureMode !== 'automatic') return;
+    const target = guidedCapture.targetPose;
+    if (target === 'front') {
+      accessibility.announceInstruction('Look straight ahead');
+    } else if (target === 'left') {
+      accessibility.announceInstruction('Turn to your left');
+    } else if (target === 'right') {
+      accessibility.announceInstruction('Turn to your right');
+    }
+  }, [guidedCapture.targetPose, captureMode, accessibility.announceInstruction]);
+
+  // Haptic feedback for countdown ticks
+  useEffect(() => {
+    if (countdown.countdownValue !== null) {
+      accessibility.playCountdownTickFeedback();
+    }
+  }, [countdown.countdownValue]);
+
+  // Capture on countdown "1" with a small dummy delay
+  const captureScheduledRef = React.useRef(false);
+  useEffect(() => {
+    if (countdown.countdownValue === 1 && guidedCapture.isCountingDown && !captureScheduledRef.current) {
+      captureScheduledRef.current = true;
+      const timer = setTimeout(() => {
+        countdown.cancelCountdown();
+        guidedCapture.handleCountdownComplete();
+        captureScheduledRef.current = false;
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+    if (countdown.countdownValue === 3) {
+      captureScheduledRef.current = false;
+    }
+  }, [countdown.countdownValue, guidedCapture.isCountingDown, countdown.cancelCountdown, guidedCapture.handleCountdownComplete]);
+
+  // Reset capture if the camera is flipped mid-flow
+  useEffect(() => {
+    if (isCameraReady) {
+      guidedCapture.resetCapture();
+      if (captureMode === 'automatic') {
+        guidedCapture.startCapture();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraPosition]);
+
+  // Reset on modal close
+  useEffect(() => {
+    if (!visible) {
+      guidedCapture.resetCapture();
+      countdown.cancelCountdown();
+      accessibility.stopAnnouncement();
+      setStage('capture');
+      setCaptureMode('automatic');
+      setIsCameraReady(false);
+    }
+  }, [visible]);
 
   const stopScanAnimation = () => {
     if (scanLoopRef.current) {
@@ -106,15 +280,37 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
     };
   }, []);
 
+  // Automatic photo capture function
+  const handleAutomaticCapture = async () => {
+    try {
+      if (!cameraRef.current) throw new Error('Camera not ready');
+      const image = await cameraRef.current.takeSnapshot();
+      const path = await image.saveToTemporaryFileAsync('jpg', 80);
+      const uri = path.startsWith('file://') ? path : `file://${path}`;
+      image.dispose?.();
+      guidedCapture.handlePhotoTaken(uri);
+      accessibility.playPhotoCaptureFeedback();
+      flashAnim.setValue(1);
+      Animated.timing(flashAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      accessibility.playErrorFeedback();
+      Alert.alert('Error', 'Failed to capture photo. Please try again.');
+    }
+  };
+
 
   const handleTakePhoto = async () => {
-    if (!cameraRef) return;
-
+    await new Promise((resolve) => setTimeout(resolve, 300));
     try {
-      const photo = await cameraRef.takePictureAsync({ quality: 0.8, base64: false });
-      if (photo?.uri) {
-        setCapturedImages((prev) => [...prev, photo.uri]);
-      }
+      const photo = await photoOutput.capturePhoto({}, {});
+      const path = await photo.saveToTemporaryFileAsync();
+      const uri = path.startsWith('file://') ? path : `file://${path}`;
+      photo.dispose();
+      guidedCapture.handlePhotoTaken(uri);
+      accessibility.playPhotoCaptureFeedback();
+      flashAnim.setValue(1);
+      Animated.timing(flashAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
     } catch (error) {
       console.error('Error taking photo:', error);
       Alert.alert('Error', 'Failed to capture photo. Please try again.');
@@ -131,7 +327,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
       });
 
       if (!result.canceled && result.assets[0]) {
-        setCapturedImages((prev) => [...prev, result.assets[0].uri]);
+        guidedCapture.handlePhotoTaken(result.assets[0].uri);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -139,8 +335,9 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
     }
   };
 
-  const handleRemovePhoto = (index: number) => {
-    setCapturedImages((prev) => prev.filter((_, i) => i !== index));
+  const handleRetakePhoto = (index: 0 | 1 | 2) => {
+    guidedCapture.retakePhoto(index);
+    setStage('capture');
   };
 
 
@@ -169,8 +366,9 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
 
     try {
       // Convert all captured images to base64 and send together to Gemini
+      const imageUris = capturedImages.filter((uri): uri is string => uri !== null);
       const base64Images = await Promise.all(
-        capturedImages.slice(0, MIN_PHOTOS).map((uri) => convertImageToBase64(uri))
+        imageUris.slice(0, MIN_PHOTOS).map((uri) => convertImageToBase64(uri))
       );
 
       let result: SkinAnalysisResult;
@@ -252,9 +450,10 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
 
 
   const handleRetake = () => {
-    setCapturedImages([]);
+    guidedCapture.resetCapture();
     setAnalysisResult(null);
     setStage('capture');
+    setCaptureMode('automatic');
   };
 
   const translateY = scanProgress.interpolate({
@@ -288,7 +487,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
         {/* Capture Stage */}
         {stage === 'capture' && (
           <View style={styles.captureContainer}>
-            {!cameraPermission?.granted ? (
+            {!hasPermission ? (
               <View style={styles.permissionContainer}>
                 <MaterialCommunityIcons name="camera-off" size={64} color={SaharaTheme.onSurfaceVariant} />
                 <Text style={styles.permissionText}>Camera permission is required</Text>
@@ -310,34 +509,75 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
             ) : (
               <>
                 <View style={styles.cameraWrapper}>
-                  {isCameraReady ? (
+                  {isCameraReady && device ? (
                     <>
-                      <CameraView
-                        ref={(ref) => setCameraRef(ref)}
+                      <Camera
+                        ref={cameraRef}
                         style={styles.camera}
-                        facing={facing}
+                        device={device}
+                        isActive={visible && stage === 'capture'}
+                        outputs={cameraOutputs}
                       />
-                      {/* Overlay */}
-                      <View style={styles.cameraOverlay}>
-                        <View style={styles.faceGuide} />
-                        <View style={styles.reticleCornerTL} />
-                        <View style={styles.reticleCornerTR} />
-                        <View style={styles.reticleCornerBL} />
-                        <View style={styles.reticleCornerBR} />
-                        {/* Angle prompt inside camera */}
-                        {!canAnalyze && (
-                          <View style={styles.anglePromptBanner}>
-                            <MaterialCommunityIcons
-                              name="face-man"
-                              size={16}
-                              color="#fff"
-                            />
-                            <Text style={styles.anglePromptText}>
-                              {ANGLE_PROMPTS[currentSlot].hint}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
+                      {/* Capture flash */}
+                      <Animated.View
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: '#fff',
+                          opacity: flashAnim,
+                        }}
+                      />
+
+                      {/* Icon-only camera flip */}
+                      {captureMode === 'automatic' && !canAnalyze && (
+                        <TouchableOpacity
+                          style={styles.flipIconBtn}
+                          onPress={() => {
+                            setCameraPosition((p) => (p === 'front' ? 'back' : 'front'));
+                            guidedCapture.enableManualMode();
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialCommunityIcons name="camera-flip" size={24} color="#fff" />
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Guided Capture Overlay */}
+                      {captureMode === 'automatic' ? (
+                        <FaceGuideOverlay
+                          countdownValue={countdown.countdownValue}
+                          isDetecting={guidedCapture.isPoseValid}
+                          instructionText={guidedCapture.instruction.text}
+                          showTroubleButton={guidedCapture.showManualFallback}
+                          onManualModeActivated={guidedCapture.enableManualMode}
+                          progress={countdown.progress}
+                        />
+                      ) : (
+                        <View style={styles.cameraOverlay}>
+                          <View style={styles.faceGuide} />
+                          <View style={styles.reticleCornerTL} />
+                          <View style={styles.reticleCornerTR} />
+                          <View style={styles.reticleCornerBL} />
+                          <View style={styles.reticleCornerBR} />
+                          {/* Manual mode prompt */}
+                          {!canAnalyze && (
+                            <View style={styles.anglePromptBanner}>
+                              <MaterialCommunityIcons
+                                name="camera"
+                                size={16}
+                                color="#fff"
+                              />
+                              <Text style={styles.anglePromptText}>
+                                {ANGLE_PROMPTS[currentSlot].hint}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
                     </>
                   ) : (
                     <View style={styles.cameraLoading}>
@@ -347,76 +587,106 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
                   )}
                 </View>
 
-                {/* Thumbnail slots */}
-                <View style={styles.thumbnailRow}>
-                  {Array.from({ length: MIN_PHOTOS }).map((_, i) => (
-                    <View key={i} style={styles.thumbnailSlot}>
-                      {capturedImages[i] ? (
-                        <>
-                          <Image
-                            source={{ uri: capturedImages[i] }}
-                            style={styles.thumbnailImage}
-                            resizeMode="cover"
-                          />
-                          <TouchableOpacity
-                            style={styles.thumbnailRemoveBtn}
-                            onPress={() => handleRemovePhoto(i)}
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="close-circle" size={18} color="#fff" />
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <View style={styles.thumbnailEmpty}>
-                          <Ionicons
-                            name="camera-outline"
-                            size={22}
-                            color={i === capturedImages.length ? SaharaTheme.primary : SaharaTheme.outlineVariant}
-                          />
-                          <Text style={[
-                            styles.thumbnailSlotLabel,
-                            i === capturedImages.length && { color: SaharaTheme.primary },
-                          ]}>
-                            {['Front', 'Left', 'Right'][i]}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </View>
+                {/* Progress Bar - shows in automatic mode */}
+                {captureMode === 'automatic' && guidedCapture.state !== CaptureState.PHOTO_REVIEW && (
+                  <CaptureProgressBar
+                    currentStep={
+                      guidedCapture.targetPose === 'front' ? 0 : 
+                      guidedCapture.targetPose === 'left' ? 1 : 2
+                    }
+                    completedSteps={[
+                      capturedImages[0] !== null,
+                      capturedImages[1] !== null,
+                      capturedImages[2] !== null,
+                    ]}
+                  />
+                )}
+
+                {/* Photo Review Grid - shown when photos are captured */}
+                {(guidedCapture.state === CaptureState.PHOTO_REVIEW || canAnalyze) && (
+                  <PhotoReviewGrid
+                    capturedImages={capturedImages}
+                    labels={['Front', 'Left', 'Right']}
+                    onRetake={handleRetakePhoto}
+                    disabled={stage !== 'capture'}
+                  />
+                )}
+
+                {/* Thumbnail slots - shown in manual mode */}
+                {captureMode === 'manual' && !canAnalyze && (
+                  <View style={styles.thumbnailRow}>
+                    {Array.from({ length: MIN_PHOTOS }).map((_, i) => (
+                      <View key={i} style={styles.thumbnailSlot}>
+                        {capturedImages[i] ? (
+                          <>
+                            <Image
+                              source={{ uri: capturedImages[i] }}
+                              style={styles.thumbnailImage}
+                              resizeMode="cover"
+                            />
+                            <TouchableOpacity
+                              style={styles.thumbnailRemoveBtn}
+                              onPress={() => handleRetakePhoto(i as 0 | 1 | 2)}
+                              activeOpacity={0.8}
+                            >
+                              <Ionicons name="close-circle" size={18} color="#fff" />
+                            </TouchableOpacity>
+                          </>
+                        ) : (
+                          <View style={styles.thumbnailEmpty}>
+                            <Ionicons
+                              name="camera-outline"
+                              size={22}
+                              color={i === currentSlot ? SaharaTheme.primary : SaharaTheme.outlineVariant}
+                            />
+                            <Text style={[
+                              styles.thumbnailSlotLabel,
+                              i === currentSlot && { color: SaharaTheme.primary },
+                            ]}>
+                              {['Front', 'Left', 'Right'][i]}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 <View style={styles.captureControls}>
-                  <View style={styles.buttonRow}>
-                    <TouchableOpacity
-                      style={styles.flipBtn}
-                      onPress={() => setFacing(facing === 'front' ? 'back' : 'front')}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="camera-reverse" size={28} color={SaharaTheme.onSurface} />
-                    </TouchableOpacity>
+                  {/* Manual mode button row */}
+                  {captureMode === 'manual' && (
+                    <View style={styles.buttonRow}>
+                      <TouchableOpacity
+                        style={styles.flipBtn}
+                        onPress={() => setCameraPosition(cameraPosition === 'front' ? 'back' : 'front')}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="camera-reverse" size={28} color={SaharaTheme.onSurface} />
+                      </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[styles.captureBtn, canAnalyze && styles.captureBtnDisabled]}
-                      onPress={canAnalyze ? undefined : handleTakePhoto}
-                      activeOpacity={0.8}
-                      disabled={canAnalyze}
-                    >
-                      <View style={styles.captureBtnInner} />
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.captureBtn, canAnalyze && styles.captureBtnDisabled]}
+                        onPress={canAnalyze ? undefined : handleTakePhoto}
+                        activeOpacity={0.8}
+                        disabled={canAnalyze}
+                      >
+                        <View style={styles.captureBtnInner} />
+                      </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.galleryBtn}
-                      onPress={canAnalyze ? undefined : handlePickImage}
-                      activeOpacity={0.7}
-                      disabled={canAnalyze}
-                    >
-                      <Ionicons
-                        name="images"
-                        size={28}
-                        color={canAnalyze ? SaharaTheme.outlineVariant : SaharaTheme.onSurface}
-                      />
-                    </TouchableOpacity>
-                  </View>
+                      <TouchableOpacity
+                        style={styles.galleryBtn}
+                        onPress={canAnalyze ? undefined : handlePickImage}
+                        activeOpacity={0.7}
+                        disabled={canAnalyze}
+                      >
+                        <Ionicons
+                          name="images"
+                          size={28}
+                          color={canAnalyze ? SaharaTheme.outlineVariant : SaharaTheme.onSurface}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  )}
 
                   {/* START ANALYSIS — only shown when 3 images ready */}
                   {canAnalyze && (
@@ -440,7 +710,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
           <View style={styles.scanContainer}>
             <View style={styles.frameWrapper}>
               {capturedImages[0] ? (
-                <Image source={{ uri: capturedImages[0] }} style={styles.scanImage} resizeMode="cover" />
+                <Image source={{ uri: capturedImages[0]! }} style={styles.scanImage} resizeMode="cover" />
               ) : (
                 <Image source={SCAN_IMAGE} style={styles.scanImage} resizeMode="cover" />
               )}
@@ -478,7 +748,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
           <ScrollView contentContainerStyle={styles.resultsContainer}>
             {/* 3-photo thumbnail strip */}
             <View style={styles.resultThumbRow}>
-              {capturedImages.slice(0, MIN_PHOTOS).map((uri, i) => (
+              {capturedImages.filter((uri): uri is string => uri !== null).slice(0, MIN_PHOTOS).map((uri, i) => (
                 <Image
                   key={i}
                   source={{ uri }}
@@ -855,6 +1125,24 @@ const styles = StyleSheet.create({
   },
   captureBtnDisabled: {
     opacity: 0.35,
+  },
+  flipIconBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  manualShortcutText: {
+    fontFamily: Fonts?.sans,
+    fontSize: 12,
+    fontWeight: '600',
+    color: SaharaTheme.primary,
   },
   // Start Analysis CTA
   analyseBtn: {
