@@ -124,11 +124,12 @@ export default function TabLayout() {
           ),
         }}
       />
-      {/* Hide cart and explore tabs */}
+      {/* Cart is a focused checkout screen: hide tab and tab bar */}
       <Tabs.Screen
         name="cart"
         options={{
           href: null,
+          tabBarStyle: { display: 'none' },
         }}
       />
       {/* Hide default explore tab if present */}

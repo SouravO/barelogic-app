@@ -38,7 +38,6 @@ export const HomeScreen: React.FC = () => {
       <Header
         onSearchPress={() => setIsSearchVisible(true)}
         onCartPress={() => router.push('/(tabs)/cart')}
-        onNotificationPress={() => Alert.alert('Notifications', 'You have no new alerts.')}
         cartCount={cartCount}
       />
 

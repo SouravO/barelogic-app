@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+
 import { colors, spacing } from '@/theme';
+import { AppNavbar } from '@/components/layout/AppNavbar';
 import { MORNING_ROUTINE, NIGHT_ROUTINE } from '../data/routines';
 import { ProductLineup } from '../components/ProductLineup';
 import { RoutineStepList } from '../components/RoutineStepList';
@@ -24,24 +26,12 @@ export const RoutineScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => router.back()} 
-          style={styles.headerButton}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
-        </TouchableOpacity>
-        
-        <Text style={styles.headerTitle}>My Routine</Text>
-        
-        <TouchableOpacity 
-          style={styles.headerButton}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="calendar-outline" size={24} color={colors.onSurface} />
-        </TouchableOpacity>
-      </View>
+      <AppNavbar
+        variant="main"
+        title="NOTWO"
+        onSearchPress={() => {}}
+        onCartPress={() => router.push('/(tabs)/cart')}
+      />
 
       {/* Toggle Tabs */}
       <View style={styles.toggleContainer}>

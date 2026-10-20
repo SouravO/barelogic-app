@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Image,
   Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { SaharaTheme, Fonts } from '@/src/theme';
-import { Header } from '@/components/layout/Header';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, Fonts, SaharaTheme, spacing } from '@/src/theme';
+import { ScreenHeader } from '@/components/layout/ScreenHeader';
 
 interface CartItem {
   id: string;
@@ -41,6 +43,8 @@ const INITIAL_CART: CartItem[] = [
 ];
 
 export default function CartScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState<CartItem[]>(INITIAL_CART);
 
   const updateQuantity = (id: string, delta: number) => {
@@ -57,25 +61,51 @@ export default function CartScreen() {
     );
   };
 
+  const removeItem = (id: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  };
+
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <Header cartCount={items.reduce((acc, i) => acc + i.quantity, 0)} />
-
-      <View style={styles.headerSection}>
-        <Text style={styles.pageTitle}>Your Shopping Bag</Text>
-        <Text style={styles.pageSub}>{items.length} Clinical Formulations Selected</Text>
-      </View>
+      <ScreenHeader
+        title="Your Shopping Bag"
+        onBackPress={handleBack}
+      />
 
       {items.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Feather name="shopping-bag" size={48} color={SaharaTheme.outline} />
-          <Text style={styles.emptyText}>Your shopping bag is empty.</Text>
+          <Feather name="shopping-bag" size={56} color={SaharaTheme.outline} />
+          <Text style={styles.emptyTitle}>Your bag is empty</Text>
+          <Text style={styles.emptyText}>
+            Add clinical formulations to continue checkout.
+          </Text>
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={() => router.replace('/(tabs)/shop')}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.continueButtonText}>CONTINUE SHOPPING</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <>
-          <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: 150 + insets.bottom },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
             {items.map((item) => (
               <View key={item.id} style={styles.cartCard}>
                 <Image source={item.image} style={styles.thumb} resizeMode="cover" />
@@ -86,24 +116,35 @@ export default function CartScreen() {
                   <Text style={styles.itemPrice}>${item.price}</Text>
                 </View>
 
-                <View style={styles.stepper}>
+                <View style={styles.itemActions}>
                   <TouchableOpacity
-                    style={styles.stepBtn}
-                    onPress={() => updateQuantity(item.id, -1)}
+                    style={styles.removeButton}
+                    onPress={() => removeItem(item.id)}
                     activeOpacity={0.7}
+                    accessibilityLabel={`Remove ${item.title}`}
                   >
-                    <Feather name="minus" size={14} color={SaharaTheme.onSurfaceVariant} />
+                    <Feather name="trash-2" size={16} color={SaharaTheme.error} />
                   </TouchableOpacity>
 
-                  <Text style={styles.qtyText}>{item.quantity}</Text>
+                  <View style={styles.stepper}>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => updateQuantity(item.id, -1)}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="minus" size={14} color={SaharaTheme.onSurfaceVariant} />
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.stepBtn}
-                    onPress={() => updateQuantity(item.id, 1)}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="plus" size={14} color={SaharaTheme.onSurfaceVariant} />
-                  </TouchableOpacity>
+                    <Text style={styles.qtyText}>{item.quantity}</Text>
+
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => updateQuantity(item.id, 1)}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="plus" size={14} color={SaharaTheme.onSurfaceVariant} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             ))}
@@ -125,7 +166,7 @@ export default function CartScreen() {
             </View>
           </ScrollView>
 
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <TouchableOpacity
               style={styles.checkoutBtn}
               onPress={() => Alert.alert('Checkout', `Order total: $${subtotal}. Thank you!`)}
@@ -145,34 +186,61 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: SaharaTheme.surface,
   },
-  headerSection: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: SaharaTheme.outlineVariant,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.marginMobile,
+    paddingTop: spacing.xl + 20,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.outlineVariant,
   },
-  pageTitle: {
-    fontFamily: Fonts?.serif,
-    fontSize: 28,
-    color: SaharaTheme.primary,
-    marginBottom: 4,
+  headerButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  pageSub: {
-    fontFamily: Fonts?.sans,
-    fontSize: 13,
-    color: SaharaTheme.onSurfaceVariant,
+  headerTitle: {
+    fontFamily: 'GoogleSansText-Bold',
+    fontSize: 20,
+    color: colors.primary,
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontFamily: Fonts?.serif,
+    fontSize: 24,
+    color: SaharaTheme.primary,
   },
   emptyText: {
     fontFamily: Fonts?.sans,
-    fontSize: 15,
+    fontSize: 14,
     color: SaharaTheme.onSurfaceVariant,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  continueButton: {
+    marginTop: 8,
+    backgroundColor: SaharaTheme.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 30,
+  },
+  continueButtonText: {
+    color: SaharaTheme.onPrimary,
+    fontFamily: Fonts?.sans,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
   listContent: {
     padding: 20,
@@ -182,14 +250,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: SaharaTheme.surfaceContainerLow,
-    padding: 12,
-    borderRadius: 14,
+    padding: 14,
+    borderRadius: 16,
     gap: 14,
   },
   thumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 10,
+    width: 72,
+    height: 72,
+    borderRadius: 12,
   },
   itemInfo: {
     flex: 1,
@@ -214,6 +282,18 @@ const styles = StyleSheet.create({
     color: SaharaTheme.onSurfaceVariant,
     marginTop: 2,
   },
+  itemActions: {
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  removeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SaharaTheme.surfaceContainerLowest,
+  },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -226,8 +306,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   stepBtn: {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -236,12 +316,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: SaharaTheme.onSurface,
+    minWidth: 18,
+    textAlign: 'center',
   },
   summaryCard: {
     backgroundColor: SaharaTheme.surfaceContainerLow,
     padding: 20,
     borderRadius: 16,
-    marginTop: 12,
+    marginTop: 4,
     gap: 12,
   },
   summaryRow: {
@@ -284,6 +366,10 @@ const styles = StyleSheet.create({
     color: SaharaTheme.primary,
   },
   footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     padding: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: SaharaTheme.outlineVariant,
