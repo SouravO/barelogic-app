@@ -111,7 +111,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
       const faceWidthRatio = b.width / screenW;
 
       // Require the face to be reasonably centered and large enough within the guide
-      console.log('FACE', { centerX, centerY, faceWidthRatio, faceHeightRatio: b.height / screenH, bounds: b });
+
       const faceHeightRatio = b.height / screenH;
       const inGuide =
         faces.length === 1 &&
