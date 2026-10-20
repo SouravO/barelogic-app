@@ -60,12 +60,6 @@ module.exports = {
         }
       ],
       [
-        "expo-image-picker",
-        {
-          photosPermission: "Allow $(PRODUCT_NAME) to access your photos to upload images for skin analysis"
-        }
-      ],
-      [
         "expo-build-properties",
         {
           android: {
