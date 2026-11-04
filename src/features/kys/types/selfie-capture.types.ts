@@ -1,170 +1,81 @@
 /**
- * Type definitions for automatic guided selfie capture system
+ * Type definitions for the Face ID-style circular selfie capture
  */
 
 /**
- * Capture state machine states
- */
-export enum CaptureState {
-  INITIALIZING = 'INITIALIZING',
-  WAITING_FOR_FACE = 'WAITING_FOR_FACE',
-  DETECTING_FRONT = 'DETECTING_FRONT',
-  COUNTDOWN_FRONT = 'COUNTDOWN_FRONT',
-  CAPTURING_FRONT = 'CAPTURING_FRONT',
-  DETECTING_LEFT = 'DETECTING_LEFT',
-  COUNTDOWN_LEFT = 'COUNTDOWN_LEFT',
-  CAPTURING_LEFT = 'CAPTURING_LEFT',
-  DETECTING_RIGHT = 'DETECTING_RIGHT',
-  COUNTDOWN_RIGHT = 'COUNTDOWN_RIGHT',
-  CAPTURING_RIGHT = 'CAPTURING_RIGHT',
-  PHOTO_REVIEW = 'PHOTO_REVIEW',
-  MANUAL_FALLBACK = 'MANUAL_FALLBACK',
-  ANALYSIS = 'ANALYSIS',
-}
-
-/**
- * Head pose orientation (Euler angles in degrees)
+ * Head pose orientation (Euler angles in degrees), already normalized so that
+ * positive yaw = user turned to THEIR left, positive pitch = looking up.
  */
 export interface HeadPose {
-  /** Yaw: left/right rotation (-90 to +90, negative = right turn, positive = left turn) */
   yaw: number;
-  /** Pitch: up/down tilt (-90 to +90, negative = looking down, positive = looking up) */
   pitch: number;
-  /** Roll: head tilt (-90 to +90, negative = tilt right, positive = tilt left) */
   roll: number;
 }
 
-/**
- * Face detection result
- */
-export interface FaceDetectionResult {
-  /** Whether a face is detected */
-  faceDetected: boolean;
-  /** Number of faces detected */
-  faceCount: number;
-  /** Face bounding box (normalized 0-1) */
-  bounds?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  /** Head pose orientation */
-  headPose?: HeadPose;
-  /** Confidence score (0-1) */
-  confidence?: number;
+/** Face rectangle in camera-view coordinates (dp). */
+export interface FaceBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
-/**
- * Pose validation thresholds
- */
-export interface PoseThresholds {
-  front: {
-    yaw: [number, number]; // min, max range in degrees
-    pitch: [number, number];
-  };
-  left: {
-    yaw: [number, number];
-    pitch: [number, number];
-  };
-  right: {
-    yaw: [number, number];
-    pitch: [number, number];
-  };
-}
-
-/**
- * Default pose thresholds (moderate angles, calibratable)
- */
-export const DEFAULT_THRESHOLDS: PoseThresholds = {
-  front: { yaw: [-10, 10], pitch: [-15, 15] },
-  left: { yaw: [30, 45], pitch: [-15, 15] },
-  right: { yaw: [-45, -30], pitch: [-15, 15] },
-};
-
-/**
- * Target pose for capture
- */
+/** Angles we save a photo for. Order matches the photo slots. */
 export type TargetPose = 'front' | 'left' | 'right';
+export const TARGET_POSES: readonly TargetPose[] = ['front', 'left', 'right'];
 
-/**
- * Countdown state
- */
-export type CountdownState = 'IDLE' | 'COUNTING' | 'CAPTURING';
+/** Photo slot index: 0 = Front, 1 = Left, 2 = Right */
+export type PhotoSlot = 0 | 1 | 2;
 
-/**
- * Visual feedback for countdown
- */
-export interface CountdownVisuals {
-  /** Current countdown number */
-  number: 3 | 2 | 1 | null;
-  /** Border color for face guide */
-  borderColor: string;
-  /** Border width in pixels */
-  borderWidth: number;
-  /** Scale pulse animation value (1.0 - 1.05) */
-  pulseScale: number;
-  /** Progress from 0 to 1 */
-  progress: number;
-}
+export type CapturedImages = [string | null, string | null, string | null];
 
-/**
- * Capture mode
- */
 export type CaptureMode = 'automatic' | 'manual';
 
 /**
- * Photo slot for retake functionality
+ * Phases of the circular sweep:
+ * intro → scanning → complete (short success animation) → review
  */
-export type PhotoSlot = 0 | 1 | 2; // Front, Left, Right
+export type SweepPhase = 'intro' | 'scanning' | 'complete' | 'review';
 
-/**
- * Guided capture configuration
- */
-export interface GuidedCaptureConfig {
-  /** Countdown duration in milliseconds */
-  countdownDuration: number;
-  /** Timeout before showing manual fallback (milliseconds) */
-  manualFallbackTimeout: number;
-  /** Pose validation thresholds */
-  thresholds: PoseThresholds;
-  /** Enable accessibility features */
-  enableAccessibility: boolean;
-  /** Detection frame rate throttle (fps) */
-  detectionFps: number;
+/** Inclusive angle window for a capture bin, in degrees. */
+export interface PoseBin {
+  yaw: [number, number];
+  pitch: [number, number];
 }
 
-/**
- * Default guided capture configuration
- */
-export const DEFAULT_CAPTURE_CONFIG: GuidedCaptureConfig = {
-  countdownDuration: 3000, // 3 seconds
-  manualFallbackTimeout: 18000, // 18 seconds
-  thresholds: DEFAULT_THRESHOLDS,
-  enableAccessibility: true,
-  detectionFps: 12,
+export interface SweepConfig {
+  /** Number of tick segments around the ring */
+  ringSegments: number;
+  /** Head must be turned at least this far (deg) to fill a ring segment */
+  ringFillMagnitude: number;
+  /** Capture windows per pose */
+  bins: Record<TargetPose, PoseBin>;
+  /** Skip capture only while the head whips faster than this (deg per scan) */
+  maxCaptureVelocity: number;
+  /** EMA smoothing factor for the pose (0-1, higher = more responsive) */
+  smoothing: number;
+  /** Minimum eye-open probability for a photo */
+  minEyeOpen: number;
+  /** Show the manual fallback after this long without finishing (ms) */
+  manualFallbackMs: number;
+  /** Give a directional nudge after this long without a new capture (ms) */
+  nudgeAfterMs: number;
+}
+
+export const DEFAULT_SWEEP_CONFIG: SweepConfig = {
+  ringSegments: 48,
+  ringFillMagnitude: 12,
+  bins: {
+    front: { yaw: [-8, 8], pitch: [-10, 10] },
+    left: { yaw: [22, 50], pitch: [-20, 20] },
+    right: { yaw: [-50, -22], pitch: [-20, 20] },
+  },
+  maxCaptureVelocity: 12,
+  smoothing: 0.6,
+  minEyeOpen: 0.5,
+  manualFallbackMs: 20000,
+  nudgeAfterMs: 5000,
 };
 
-/**
- * Capture instruction message
- */
-export interface CaptureInstruction {
-  /** Primary instruction text */
-  text: string;
-  /** Icon name for MaterialCommunityIcons */
-  icon?: string;
-  /** Instruction type for styling */
-  type: 'info' | 'guidance' | 'success' | 'error' | 'waiting';
-}
-
-/**
- * Face detection service interface
- */
-export interface FaceDetectionService {
-  /** Start detection with callback */
-  startDetection(onDetected: (result: FaceDetectionResult) => void): void;
-  /** Stop detection and cleanup */
-  stopDetection(): void;
-  /** Whether detection is currently active */
-  isActive: boolean;
-}
+/** Result of the coarse "is the face usable" check */
+export type PositionIssue = 'none' | 'noFace' | 'multipleFaces' | 'tooFar' | 'tooClose' | 'offCenter';

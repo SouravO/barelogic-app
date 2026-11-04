@@ -1,9 +1,10 @@
 import { Fonts, SaharaTheme } from '@/theme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  Animated, Dimensions, Easing,
+  Animated,
+  Easing,
   Image,
   Modal,
   ScrollView,
@@ -13,19 +14,11 @@ import {
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
-import { useFaceScannerOutput } from 'vision-camera-face-detection';
 import { useCaptureAccessibility } from '../hooks/useCaptureAccessibility';
-import { useCountdownTimer } from '../hooks/useCountdownTimer';
-
-import { useGuidedCapture } from '../hooks/useGuidedCapture';
+import { useFaceSweepCapture } from '../hooks/useFaceSweepCapture';
 import { analyzeSkinWithGemini, convertImageToBase64, testConnectivity } from '../services/geminiApi';
 import type { SkinAnalysisResult } from '../types';
-import type { CaptureMode, FaceDetectionResult } from '../types/selfie-capture.types';
-import { CaptureState } from '../types/selfie-capture.types';
-import { CaptureProgressBar } from './CaptureProgressBar';
-import { FaceGuideOverlay } from './FaceGuideOverlay';
-import { PhotoReviewGrid } from './PhotoReviewGrid';
+import { CaptureStage, type CameraHandle } from './CaptureStage';
 
 interface KysScannerModalProps {
   visible: boolean;
@@ -53,11 +46,14 @@ const MARKERS = [
 const SCAN_IMAGE = require('@/assets/images/hero_kys.png');
 const MIN_PHOTOS = 3;
 
-const ANGLE_PROMPTS = [
-  { label: 'Photo 1 / 3', hint: 'FRONT FACE — look straight at camera', icon: 'face-man' },
-  { label: 'Photo 2 / 3', hint: 'LEFT CHEEK — turn head slightly left', icon: 'face-man-profile' },
-  { label: 'Photo 3 / 3', hint: 'RIGHT CHEEK — turn head slightly right', icon: 'face-man-profile' },
-];
+/** Spoken prompts: only the few that matter, so voice never chatters. */
+const SPOKEN_INSTRUCTIONS = new Set([
+  'Position your face in the circle',
+  'Move your head slowly to complete the circle',
+  'Turn your head a little more to your left',
+  'Turn your head a little more to your right',
+  'Look straight at the camera',
+]);
 
 export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   visible,
@@ -68,260 +64,52 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   const [stage, setStage] = useState<'capture' | 'scanning' | 'results'>('capture');
   const [activeMarkerIndex, setActiveMarkerIndex] = useState(0);
   const [analysisResult, setAnalysisResult] = useState<SkinAnalysisResult | null>(null);
-  const { hasPermission, requestPermission: requestCameraPermission } = useCameraPermission();
-  const cameraRef = React.useRef<any>(null);
-  const bottomPanelRef = React.useRef<ScrollView>(null);
-  const [cameraPosition, setCameraPosition] = useState<'front' | 'back'>('front');
-  const device = useCameraDevice(cameraPosition);
   const [scanProgress] = useState(() => new Animated.Value(0));
-  const [flashAnim] = useState(() => new Animated.Value(0));
-  const [isCameraReady, setIsCameraReady] = useState(false);
-  const [captureMode, setCaptureMode] = useState<CaptureMode>('automatic');
-  const scanLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
-  const markerIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const scanLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const markerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Guided capture hooks
-  const guidedCapture = useGuidedCapture();
-  const countdown = useCountdownTimer(3000);
   const accessibility = useCaptureAccessibility(true); // Voice + haptics enabled
+  const cameraHandleRef = useRef<CameraHandle | null>(null);
 
-  // Throttle face detection callbacks to ~12 fps
-  const lastFaceCallbackRef = React.useRef<number>(0);
-
-  const scannerOutput = useFaceScannerOutput({
-    onFaceScanned: (faces) => {
-      if (captureMode !== 'automatic' || stage !== 'capture') return;
-      const now = Date.now();
-      if (now - lastFaceCallbackRef.current < 83) return;
-      lastFaceCallbackRef.current = now;
-
-      if (faces.length === 0) {
-        guidedCapture.handleFaceDetected({ faceDetected: false, faceCount: 0 } as any);
-        return;
-      }
-
-      const face = faces[0];
-      const b = face.bounds;
-      const screenW = Dimensions.get('window').width;
-      const screenH = Dimensions.get('window').height;
-
-      // Normalize center (autoMode gives screen-space bounds)
-      const centerX = (b.x + b.width / 2) / screenW;
-      const centerY = (b.y + b.height / 2) / screenH;
-      const faceWidthRatio = b.width / screenW;
-
-      // Require the face to be reasonably centered and large enough within the guide
-
-      const faceHeightRatio = b.height / screenH;
-      const inGuide =
-        faces.length === 1 &&
-        centerX > 0.35 && centerX < 0.65 &&
-        centerY > 0.3 && centerY < 0.6 &&
-        faceWidthRatio > 0.35 && faceWidthRatio < 0.8 &&
-        faceHeightRatio > 0.45 && faceHeightRatio < 0.9;
-
-      const result = inGuide
-        ? {
-            faceDetected: true,
-            faceCount: 1,
-            bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
-            headPose: { yaw: face.yawAngle, pitch: face.pitchAngle, roll: face.rollAngle },
-            confidence: 1,
-          }
-        : { faceDetected: false, faceCount: faces.length };
-
-      guidedCapture.handleFaceDetected(result as FaceDetectionResult);
-    },
-    onError: (err) => console.warn('Face scan error:', err),
-    autoMode: true,
-    windowWidth: Dimensions.get('window').width,
-    windowHeight: Dimensions.get('window').height,
-    cameraFacing: 'front',
-    outputResolution: 'preview',
+  const sweep = useFaceSweepCapture({
+    capture: (pose, bounds) => cameraHandleRef.current?.capture(pose, bounds) ?? Promise.resolve(null),
+    onPoseCaptured: () => accessibility.playPoseDetectedFeedback(),
+    onComplete: () => accessibility.playCompleteFeedback(),
   });
 
-  const photoOutput = usePhotoOutput({ qualityPrioritization: 'speed' });
-  const cameraOutputsRef = React.useRef<any>(null);
-  if (!cameraOutputsRef.current) {
-    cameraOutputsRef.current = [scannerOutput, photoOutput];
-  }
-  const cameraOutputs = cameraOutputsRef.current;
+  const capturedImages = sweep.images;
+  const canAnalyze = capturedImages.filter((img) => img !== null).length >= MIN_PHOTOS;
 
-  // Derived: which slot are we filling next?
-  const capturedImages = guidedCapture.capturedImages;
-  const currentSlot = capturedImages.filter(img => img !== null).length;
-  const canAnalyze = capturedImages.filter(img => img !== null).length >= MIN_PHOTOS;
-
-  // Initialize guided capture when modal opens
+  // Speak only key instructions during the automatic sweep
+  const { announceInstruction, stopAnnouncement } = accessibility;
   useEffect(() => {
-    if (visible && hasPermission && stage === 'capture' && !isCameraReady) {
-      const timer = setTimeout(() => {
-        setIsCameraReady(true);
-      }, 300); // 300ms delay for camera to initialize properly
-
-      return () => clearTimeout(timer);
+    if (sweep.phase === 'scanning' && sweep.mode === 'automatic' && SPOKEN_INSTRUCTIONS.has(sweep.instruction)) {
+      announceInstruction(sweep.instruction);
     }
-  }, [visible, hasPermission, stage, isCameraReady]);
+  }, [sweep.instruction, sweep.phase, sweep.mode, announceInstruction]);
 
-  // Start guided capture when camera is ready
-  useEffect(() => {
-    if (isCameraReady && captureMode === 'automatic' && stage === 'capture') {
-      guidedCapture.startCapture();
-    }
-  }, [isCameraReady, captureMode, stage]);
-
-  // Real face detection now runs via VisionCamera scanner output (no mock)
-
-  // Handle countdown coordination
-  useEffect(() => {
-    if (guidedCapture.isCountingDown && !countdown.isCountingDown) {
-      // Start countdown
-      countdown.startCountdown(() => {
-        guidedCapture.handleCountdownComplete();
-      });
-      
-    } else if (!guidedCapture.isCountingDown && countdown.isCountingDown) {
-      // Cancel countdown if pose becomes invalid
-      countdown.cancelCountdown();
-    }
-  }, [guidedCapture.isCountingDown, countdown.isCountingDown]);
-
-  // Trigger photo capture when state transitions to CAPTURING
-  useEffect(() => {
-    const capturingStates = [
-      CaptureState.CAPTURING_FRONT,
-      CaptureState.CAPTURING_LEFT,
-      CaptureState.CAPTURING_RIGHT,
-    ];
-    
-    if (capturingStates.includes(guidedCapture.state)) {
-      handleAutomaticCapture();
-    }
-  }, [guidedCapture.state]);
-
-  // Announce concise directional prompts only (not "capturing")
-  useEffect(() => {
-    if (captureMode !== 'automatic') return;
-    const target = guidedCapture.targetPose;
-    if (target === 'front') {
-      accessibility.announceInstruction('Look straight ahead');
-    } else if (target === 'left') {
-      accessibility.announceInstruction('Turn to your left');
-    } else if (target === 'right') {
-      accessibility.announceInstruction('Turn to your right');
-    }
-  }, [guidedCapture.targetPose, captureMode, accessibility.announceInstruction]);
-
-  // Haptic feedback for countdown ticks
-  useEffect(() => {
-    if (countdown.countdownValue !== null) {
-      accessibility.playCountdownTickFeedback();
-    }
-  }, [countdown.countdownValue]);
-
-  // Capture on countdown "1" with a small dummy delay
-  const captureScheduledRef = React.useRef(false);
-  useEffect(() => {
-    if (countdown.countdownValue === 1 && guidedCapture.isCountingDown && !captureScheduledRef.current) {
-      captureScheduledRef.current = true;
-      const timer = setTimeout(() => {
-        countdown.cancelCountdown();
-        guidedCapture.handleCountdownComplete();
-        captureScheduledRef.current = false;
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-    if (countdown.countdownValue === 3) {
-      captureScheduledRef.current = false;
-    }
-  }, [countdown.countdownValue, guidedCapture.isCountingDown, countdown.cancelCountdown, guidedCapture.handleCountdownComplete]);
-
-  // Reset capture if the camera is flipped mid-flow
-  useEffect(() => {
-    if (isCameraReady) {
-      guidedCapture.resetCapture();
-      if (captureMode === 'automatic') {
-        guidedCapture.startCapture();
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cameraPosition]);
-
-  // Reset on modal close
-  useEffect(() => {
-    if (!visible) {
-      guidedCapture.resetCapture();
-      countdown.cancelCountdown();
-      accessibility.stopAnnouncement();
-      setStage('capture');
-      setCaptureMode('automatic');
-      setIsCameraReady(false);
-    }
-  }, [visible]);
-
-  const stopScanAnimation = () => {
-    if (scanLoopRef.current) {
-      scanLoopRef.current.stop();
-      scanLoopRef.current = null;
-    }
+  const stopScanAnimation = useCallback(() => {
+    scanLoopRef.current?.stop();
+    scanLoopRef.current = null;
     if (markerIntervalRef.current) {
       clearInterval(markerIntervalRef.current);
       markerIntervalRef.current = null;
     }
-  };
-
-  // Stop any running scan animation when the modal unmounts
-  useEffect(() => {
-    return () => {
-      scanLoopRef.current?.stop();
-      if (markerIntervalRef.current) {
-        clearInterval(markerIntervalRef.current);
-      }
-    };
   }, []);
 
-  // Automatic photo capture function
-  const handleAutomaticCapture = async () => {
-    try {
-      if (!cameraRef.current) throw new Error('Camera not ready');
-      const image = await cameraRef.current.takeSnapshot();
-      const path = await image.saveToTemporaryFileAsync('jpg', 80);
-      const uri = path.startsWith('file://') ? path : `file://${path}`;
-      image.dispose?.();
-      guidedCapture.handlePhotoTaken(uri);
-      accessibility.playPhotoCaptureFeedback();
-      flashAnim.setValue(1);
-      Animated.timing(flashAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      accessibility.playErrorFeedback();
-      Alert.alert('Error', 'Failed to capture photo. Please try again.');
-    }
-  };
-
-
-  const handleTakePhoto = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    try {
-      const photo = await photoOutput.capturePhoto({}, {});
-      const path = await photo.saveToTemporaryFileAsync();
-      const uri = path.startsWith('file://') ? path : `file://${path}`;
-      photo.dispose();
-      guidedCapture.handlePhotoTaken(uri);
-      accessibility.playPhotoCaptureFeedback();
-      flashAnim.setValue(1);
-      Animated.timing(flashAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to capture photo. Please try again.');
-    }
-  };
-
-  const handleRetakePhoto = (index: 0 | 1 | 2) => {
-    guidedCapture.retakePhoto(index);
+  // Reset everything when the user closes the scanner
+  const { reset: resetSweep } = sweep;
+  const handleClose = useCallback(() => {
+    stopScanAnimation();
+    resetSweep();
+    stopAnnouncement();
+    setAnalysisResult(null);
     setStage('capture');
-  };
+    onClose();
+  }, [stopScanAnimation, resetSweep, stopAnnouncement, onClose]);
 
+  // Stop any running scan animation when the modal unmounts
+  useEffect(() => stopScanAnimation, [stopScanAnimation]);
 
   const startAnalysis = async () => {
     if (!canAnalyze) return;
@@ -432,11 +220,9 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
 
 
   const handleRetake = () => {
-    guidedCapture.resetCapture();
+    sweep.reset();
     setAnalysisResult(null);
     setStage('capture');
-    setCaptureMode('automatic');
-    bottomPanelRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   const translateY = scanProgress.interpolate({
@@ -445,11 +231,11 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
   });
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false}>
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={handleClose}>
       <View style={styles.container}>
         {/* Header */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 12 }]}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={handleClose} style={styles.closeBtn} activeOpacity={0.7}>
             <Ionicons name="close" size={24} color="#FFFFFF" />
           </TouchableOpacity>
 
@@ -457,18 +243,13 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
             <Text style={styles.headerTitle}>KYS DIAGNOSTIC INTELLIGENCE</Text>
             <Text style={styles.headerSub}>
               {stage === 'capture'
-                ? capturedImages.length < MIN_PHOTOS
-                  ? ANGLE_PROMPTS[currentSlot].label
-                  : 'Ready to Analyse'
+                ? sweep.phase === 'review'
+                  ? 'Ready to analyse'
+                  : sweep.mode === 'manual'
+                  ? 'Manual capture'
+                  : 'Face scan'
                 : '14-Marker AI Scan'}
             </Text>
-            {stage === 'capture' && (
-              <View style={styles.modePill}>
-                <Text style={styles.modePillText}>
-                  {captureMode === 'automatic' ? 'AUTO' : 'MANUAL'}
-                </Text>
-              </View>
-            )}
           </View>
 
           <View style={{ width: 40 }} />
@@ -477,209 +258,12 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
         {/* Capture Stage */}
         {stage === 'capture' && (
           <View style={styles.captureContainer}>
-            {!hasPermission ? (
-              <View style={styles.permissionContainer}>
-                <MaterialCommunityIcons name="camera-off" size={64} color={SaharaTheme.onSurfaceVariant} />
-                <Text style={styles.permissionText}>Camera permission is required</Text>
-                <TouchableOpacity
-                  style={styles.permissionBtn}
-                  onPress={requestCameraPermission}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.permissionBtnText}>Grant Permission</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <View style={styles.cameraWrapper}>
-                  {isCameraReady && device ? (
-                    <>
-                      <Camera
-                        ref={cameraRef}
-                        style={styles.camera}
-                        device={device}
-                        isActive={visible && stage === 'capture'}
-                        outputs={cameraOutputs}
-                      />
-                      {/* Capture flash */}
-                      <Animated.View
-                        pointerEvents="none"
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          backgroundColor: '#fff',
-                          opacity: flashAnim,
-                        }}
-                      />
-
-                      {/* Icon-only camera flip */}
-                      {captureMode === 'automatic' && !canAnalyze && (
-                        <TouchableOpacity
-                          style={styles.flipIconBtn}
-                          onPress={() => {
-                            setCameraPosition((p) => (p === 'front' ? 'back' : 'front'));
-                            guidedCapture.enableManualMode();
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <MaterialCommunityIcons name="camera-flip" size={24} color="#fff" />
-                        </TouchableOpacity>
-                      )}
-
-                      {/* Guided Capture Overlay */}
-                      {captureMode === 'automatic' ? (
-                        <FaceGuideOverlay
-                          countdownValue={countdown.countdownValue}
-                          isDetecting={guidedCapture.isPoseValid}
-                          instructionText={guidedCapture.instruction.text}
-                          showTroubleButton={guidedCapture.showManualFallback}
-                          onManualModeActivated={guidedCapture.enableManualMode}
-                          progress={countdown.progress}
-                        />
-                      ) : (
-                        <View style={styles.cameraOverlay}>
-                          <View style={styles.faceGuide} />
-                          <View style={styles.reticleCornerTL} />
-                          <View style={styles.reticleCornerTR} />
-                          <View style={styles.reticleCornerBL} />
-                          <View style={styles.reticleCornerBR} />
-                          {/* Manual mode prompt */}
-                          {!canAnalyze && (
-                            <View style={styles.anglePromptBanner}>
-                              <MaterialCommunityIcons
-                                name="camera"
-                                size={16}
-                                color="#fff"
-                              />
-                              <Text style={styles.anglePromptText}>
-                                {ANGLE_PROMPTS[currentSlot].hint}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    </>
-                  ) : (
-                    <View style={styles.cameraLoading}>
-                      <MaterialCommunityIcons name="camera" size={48} color={SaharaTheme.outlineVariant} />
-                      <Text style={styles.cameraLoadingText}>Initializing camera...</Text>
-                    </View>
-                  )}
-                </View>
-
-                <ScrollView
-                  ref={bottomPanelRef}
-                  style={styles.bottomPanel}
-                  contentContainerStyle={styles.bottomPanelContent}
-                  showsVerticalScrollIndicator={false}
-                  bounces={false}
-                >
-                  {/* Progress Bar - shows in automatic mode */}
-                  {captureMode === 'automatic' && guidedCapture.state !== CaptureState.PHOTO_REVIEW && (
-                    <CaptureProgressBar
-                      currentStep={
-                        guidedCapture.targetPose === 'front' ? 0 : 
-                        guidedCapture.targetPose === 'left' ? 1 : 2
-                      }
-                      completedSteps={[
-                        capturedImages[0] !== null,
-                        capturedImages[1] !== null,
-                        capturedImages[2] !== null,
-                      ]}
-                    />
-                  )}
-
-                  {/* Photo Review Grid - shown when photos are captured */}
-                  {(guidedCapture.state === CaptureState.PHOTO_REVIEW || canAnalyze) && (
-                    <PhotoReviewGrid
-                      capturedImages={capturedImages}
-                      labels={['Front', 'Left', 'Right']}
-                      onRetake={handleRetakePhoto}
-                      disabled={stage !== 'capture'}
-                    />
-                  )}
-
-                  {/* Thumbnail slots - shown in manual mode */}
-                  {captureMode === 'manual' && !canAnalyze && (
-                    <View style={styles.thumbnailRow}>
-                      {Array.from({ length: MIN_PHOTOS }).map((_, i) => (
-                        <View key={i} style={styles.thumbnailSlot}>
-                          {capturedImages[i] ? (
-                            <>
-                              <Image
-                                source={{ uri: capturedImages[i] }}
-                                style={styles.thumbnailImage}
-                                resizeMode="cover"
-                              />
-                              <TouchableOpacity
-                                style={styles.thumbnailRemoveBtn}
-                                onPress={() => handleRetakePhoto(i as 0 | 1 | 2)}
-                                activeOpacity={0.8}
-                              >
-                                <Ionicons name="close-circle" size={18} color="#fff" />
-                              </TouchableOpacity>
-                            </>
-                          ) : (
-                            <View style={styles.thumbnailEmpty}>
-                              <Ionicons
-                                name="camera-outline"
-                                size={22}
-                                color={i === currentSlot ? SaharaTheme.primary : SaharaTheme.outlineVariant}
-                              />
-                              <Text style={[
-                                styles.thumbnailSlotLabel,
-                                i === currentSlot && { color: SaharaTheme.primary },
-                              ]}>
-                                {['Front', 'Left', 'Right'][i]}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  <View style={styles.captureControls}>
-                    {/* Manual mode button row */}
-                    {captureMode === 'manual' && (
-                      <View style={styles.buttonRow}>
-                        <TouchableOpacity
-                          style={styles.flipBtn}
-                          onPress={() => setCameraPosition(cameraPosition === 'front' ? 'back' : 'front')}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="camera-reverse" size={28} color={SaharaTheme.onSurface} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[styles.captureBtn, canAnalyze && styles.captureBtnDisabled]}
-                          onPress={canAnalyze ? undefined : handleTakePhoto}
-                          activeOpacity={0.8}
-                          disabled={canAnalyze}
-                        >
-                          <View style={styles.captureBtnInner} />
-                        </TouchableOpacity>
-                      </View>
-                    )}
-
-                    {/* START ANALYSIS — only shown when 3 images ready */}
-                    {canAnalyze && (
-                      <TouchableOpacity
-                        style={styles.analyseBtn}
-                        onPress={startAnalysis}
-                        activeOpacity={0.88}
-                      >
-                        <MaterialCommunityIcons name="radar" size={20} color="#fff" />
-                        <Text style={styles.analyseBtnText}>START ANALYSIS</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </ScrollView>
-              </>
-            )}
+            <CaptureStage
+              active={visible && stage === 'capture'}
+              sweep={sweep}
+              onAnalyze={startAnalysis}
+              cameraHandleRef={cameraHandleRef}
+            />
           </View>
         )}
 
@@ -858,7 +442,7 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
                 style={styles.applyBtn}
                 onPress={() => {
                   onApplyRegimen?.();
-                  onClose();
+                  handleClose();
                 }}
                 activeOpacity={0.88}
               >
@@ -901,20 +485,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  modePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
-  },
-  modePillText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
   headerTitle: {
     fontFamily: Fonts?.sans,
     fontSize: 11,
@@ -932,233 +502,10 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
   },
-  permissionContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: 16,
-  },
-  permissionText: {
-    fontFamily: Fonts?.sans,
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.72)',
-    textAlign: 'center',
-  },
-  permissionBtn: {
-    backgroundColor: SaharaTheme.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 25,
-    minWidth: 200,
-  },
-  permissionBtnText: {
-    color: SaharaTheme.onPrimary,
-    fontFamily: Fonts?.sans,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  cameraWrapper: {
-    flex: 1,
-    position: 'relative',
-    minHeight: 260,
-    overflow: 'hidden',
-  },
-  bottomPanel: {
-    maxHeight: '46%',
-    backgroundColor: 'rgba(5, 8, 22, 0.92)',
-  },
-  bottomPanelContent: {
-    paddingBottom: 12,
-  },
-  camera: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-  },
-  cameraLoading: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  cameraLoadingText: {
-    fontFamily: Fonts?.sans,
-    fontSize: 14,
-    color: SaharaTheme.onSurfaceVariant,
-  },
-  cameraOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-    pointerEvents: 'none', // Allow touches to pass through to camera
-  },
-  faceGuide: {
-    width: 280,
-    height: 350,
-    borderRadius: 140,
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-    borderStyle: 'dashed',
-  },
-  captureControls: {
-    paddingVertical: 24,
-    paddingHorizontal: 24,
-    backgroundColor: 'rgba(5, 8, 22, 0.92)',
-    alignItems: 'center',
-    gap: 20,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255, 255, 255, 0.12)',
-  },
 
-  buttonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    width: '100%',
-    gap: 20,
-  },
-  captureBtn: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: SaharaTheme.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 5,
-    borderColor: SaharaTheme.surface,
-  },
-  captureBtnInner: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: SaharaTheme.onPrimary,
-  },
-  flipBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: SaharaTheme.surfaceContainerLow,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   // Angle prompt banner
-  anglePromptBanner: {
-    position: 'absolute',
-    bottom: 24,
-    left: 24,
-    right: 24,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    gap: 8,
-  },
-  anglePromptText: {
-    fontFamily: Fonts?.sans,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 0.8,
-    flex: 1,
-  },
   // Thumbnail slots
-  thumbnailRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    backgroundColor: 'rgba(5, 8, 22, 0.92)',
-  },
-  thumbnailSlot: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  thumbnailImage: {
-    width: '100%',
-    height: '100%',
-  },
-  thumbnailEmpty: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: SaharaTheme.outlineVariant,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    backgroundColor: SaharaTheme.surfaceContainerLow,
-  },
-  thumbnailSlotLabel: {
-    fontFamily: Fonts?.sans,
-    fontSize: 10,
-    fontWeight: '600',
-    color: SaharaTheme.outlineVariant,
-    letterSpacing: 0.5,
-  },
-  thumbnailRemoveBtn: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-  },
-  captureBtnDisabled: {
-    opacity: 0.35,
-  },
-  flipIconBtn: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  manualShortcutText: {
-    fontFamily: Fonts?.sans,
-    fontSize: 12,
-    fontWeight: '600',
-    color: SaharaTheme.primary,
-  },
   // Start Analysis CTA
-  analyseBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: SaharaTheme.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 40,
-    borderRadius: 50,
-    width: '100%',
-  },
-  analyseBtnText: {
-    fontFamily: Fonts?.sans,
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 1.5,
-  },
   scanContainer: {
     flex: 1,
     alignItems: 'center',

@@ -10,15 +10,15 @@ import { Platform } from 'react-native';
 
 export interface CaptureAccessibilityResult {
   /** Announce instruction via text-to-speech */
-  announceInstruction: (message: string) => Promise<void>;
+  announceInstruction: (message: string) => void;
   /** Play haptic feedback for pose detected */
   playPoseDetectedFeedback: () => Promise<void>;
   /** Play haptic feedback + announcement for photo captured */
   playPhotoCaptureFeedback: () => Promise<void>;
   /** Play haptic feedback for error */
   playErrorFeedback: () => Promise<void>;
-  /** Play haptic feedback for countdown tick */
-  playCountdownTickFeedback: () => Promise<void>;
+  /** Play success haptic when the whole scan is done */
+  playCompleteFeedback: () => Promise<void>;
   /** Stop any ongoing speech */
   stopAnnouncement: () => void;
   /** Whether speech is currently active */
@@ -136,7 +136,7 @@ export function useCaptureAccessibility(enabled: boolean = true): CaptureAccessi
     } catch (error) {
       console.warn('Capture feedback error:', error);
     }
-  }, [enabled, announceInstruction]);
+  }, [enabled]);
 
   /**
    * Play haptic feedback for error
@@ -160,16 +160,15 @@ export function useCaptureAccessibility(enabled: boolean = true): CaptureAccessi
   }, [enabled]);
 
   /**
-   * Play haptic feedback for countdown tick (3, 2, 1)
-   * Medium pulse for each number
+   * Success haptic when every angle has been captured
    */
-  const playCountdownTickFeedback = useCallback(async () => {
+  const playCompleteFeedback = useCallback(async () => {
     if (!enabled) return;
 
     try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      console.warn('Countdown feedback error:', error);
+      console.warn('Complete feedback error:', error);
     }
   }, [enabled]);
 
@@ -188,7 +187,7 @@ export function useCaptureAccessibility(enabled: boolean = true): CaptureAccessi
     playPoseDetectedFeedback,
     playPhotoCaptureFeedback,
     playErrorFeedback,
-    playCountdownTickFeedback,
+    playCompleteFeedback,
     stopAnnouncement,
     isSpeaking,
   };
