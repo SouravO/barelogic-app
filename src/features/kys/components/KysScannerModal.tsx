@@ -1,6 +1,5 @@
 import { Fonts, SaharaTheme } from '@/theme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -318,24 +317,6 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
     }
   };
 
-  const handlePickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [3, 4],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        guidedCapture.handlePhotoTaken(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to select image. Please try again.');
-    }
-  };
-
   const handleRetakePhoto = (index: 0 | 1 | 2) => {
     guidedCapture.retakePhoto(index);
     setStage('capture');
@@ -506,13 +487,6 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
                   activeOpacity={0.8}
                 >
                   <Text style={styles.permissionBtnText}>Grant Permission</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.permissionBtn, styles.uploadBtn]}
-                  onPress={handlePickImage}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.permissionBtnText}>Upload from Gallery</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -687,19 +661,6 @@ export const KysScannerModal: React.FC<KysScannerModalProps> = ({
                           disabled={canAnalyze}
                         >
                           <View style={styles.captureBtnInner} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.galleryBtn}
-                          onPress={canAnalyze ? undefined : handlePickImage}
-                          activeOpacity={0.7}
-                          disabled={canAnalyze}
-                        >
-                          <Ionicons
-                            name="images"
-                            size={28}
-                            color={canAnalyze ? SaharaTheme.outlineVariant : SaharaTheme.onSurface}
-                          />
                         </TouchableOpacity>
                       </View>
                     )}
@@ -991,9 +952,6 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     minWidth: 200,
   },
-  uploadBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-  },
   permissionBtnText: {
     color: SaharaTheme.onPrimary,
     fontFamily: Fonts?.sans,
@@ -1088,14 +1046,6 @@ const styles = StyleSheet.create({
     backgroundColor: SaharaTheme.onPrimary,
   },
   flipBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: SaharaTheme.surfaceContainerLow,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  galleryBtn: {
     width: 56,
     height: 56,
     borderRadius: 28,
